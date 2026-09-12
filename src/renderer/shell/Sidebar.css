@@ -1,0 +1,505 @@
+/* Sidebar (left rail): collapse animation, workspace form layout, session
+   list, context menu, settings mount. neo-coworker design language on
+   wikilot tokens. Shared controls (.icon-btn, .btn-secondary, .workspace-*)
+   live in styles/controls.css. */
+
+/* ---- Collapse shell: fixed inner width, outer width animates ↔ 0.
+   --sidebar-width comes from the shell's drag resizer (default 16rem). ---- */
+
+.sidebar-shell {
+  height: 100%;
+  flex-shrink: 0;
+  overflow: hidden;
+  width: var(--sidebar-width, 16rem);
+  transition: width 0.3s ease-in-out;
+}
+
+.sidebar-shell-collapsed {
+  width: 0;
+}
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: var(--sidebar-width, 16rem);
+  border-right: 1px solid var(--color-border);
+  background: var(--color-rail);
+  color: var(--color-muted);
+}
+
+/* ---- Brand header: shared vertical alignment with the main pane toolbar ---- */
+
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  gap: var(--space-4);
+  height: var(--header-h);
+  padding: 0 var(--space-3) 0 var(--space-6);
+  box-sizing: border-box;
+}
+
+.sidebar-brand {
+  font-family: var(--font-serif);
+  font-size: var(--text-4xl);
+  font-weight: 400;
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+  color: var(--color-ink);
+}
+
+/* Gear rotates 45° while the popover is open (neo-coworker). */
+.sidebar-settings-btn svg {
+  transition: transform 0.2s ease-out;
+}
+
+.sidebar-settings-btn-active svg {
+  transform: rotate(45deg);
+}
+
+/* ---- Scrollable body ---- */
+
+.sidebar-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  overflow-y: auto;
+  padding: 0 var(--space-3) var(--space-3);
+}
+
+.sidebar-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--space-1);
+  margin-bottom: var(--space-3);
+}
+
+.sidebar-section-label {
+  font-size: var(--text-xs);
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+
+.sidebar-hint {
+  margin: var(--space-3) 0 0;
+  color: var(--color-muted);
+  font-size: var(--text-md);
+}
+
+.workspace-area {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* ---- Workspace bar + form layout (controls from controls.css) ---- */
+
+.sidebar-primary-row {
+  appearance: none;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--space-8);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-ink);
+  padding: var(--space-1) var(--space-2) var(--space-1) var(--space-3);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease-out;
+}
+
+.sidebar-primary-row:hover:not(:disabled) {
+  background: var(--color-surface);
+}
+
+.sidebar-primary-row:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.sidebar-primary-row:disabled {
+  cursor: default;
+}
+
+.sidebar-primary-row > svg {
+  flex-shrink: 0;
+  color: var(--color-muted);
+}
+
+.workspace-graph-open-active {
+  background: color-mix(in srgb, var(--color-highlight) 10%, transparent);
+  color: var(--color-highlight-text);
+}
+
+.workspace-graph-open-active > svg {
+  color: currentColor;
+}
+
+.sidebar-primary-row-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-lg);
+  font-weight: 400;
+}
+
+/* ---- Sessions ↔ Files segmented control ---- */
+
+.sidebar-segmented {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  background: var(--color-surface);
+}
+
+.sidebar-segmented-btn {
+  appearance: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-lg);
+  background: transparent;
+  color: var(--color-subtle);
+  padding: var(--space-1) var(--space-2);
+  font: inherit;
+  font-size: var(--text-md);
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    color 0.15s ease-out,
+    background 0.15s ease-out,
+    border-color 0.15s ease-out;
+}
+
+.sidebar-segmented-btn:hover {
+  color: var(--color-ink);
+}
+
+.sidebar-segmented-btn-on {
+  background: var(--color-paper);
+  border-color: var(--color-border);
+  color: var(--color-ink);
+}
+
+.sidebar-segmented-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* ---- Session list (shares the left-rail list language with the File Tree:
+   --text-md rows, --radius-lg corners) ---- */
+
+.session-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-height: 0;
+  flex: 1;
+}
+
+/* The `hidden` attribute (Files mode) must beat the flex display above. */
+.session-list[hidden] {
+  display: none;
+}
+
+.session-list-scroll {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.session-list-empty {
+  margin: 0;
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-xl);
+  background: var(--color-paper);
+  padding: var(--space-4) var(--space-3);
+  color: var(--color-muted);
+  font-family: var(--font-serif);
+  font-size: var(--text-md);
+  font-style: italic;
+}
+
+.session-list-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.session-list-item {
+  appearance: none;
+  width: 100%;
+  text-align: left;
+  border: 1px solid transparent;
+  border-radius: var(--radius-lg);
+  background: transparent;
+  color: var(--color-muted);
+  padding: var(--space-2) var(--space-3);
+  font: inherit;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  transition:
+    color 0.15s ease-out,
+    background 0.15s ease-out,
+    border-color 0.15s ease-out;
+}
+
+/* Hover is a whisper (tinted wash, no border); active is the lifted paper
+   card below. The two never read as the same row. */
+.session-list-item:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-surface) 55%, transparent);
+  color: var(--color-ink);
+}
+
+/* Active Session: a lifted paper card against the rail — the rail's one
+   elevation moment, so the current thread is findable at a glance. */
+.session-list-item-active {
+  border-color: var(--color-border);
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-weight: 500;
+}
+
+.session-list-item:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.session-list-item:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.session-list-item-title {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--text-lg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-list-item-meta {
+  flex-shrink: 0;
+  font-size: var(--text-sm);
+  color: var(--color-faint);
+  transition: opacity 0.15s ease-out;
+}
+
+/* Delete affordance: on hover or keyboard focus the timestamp yields to a
+   quiet trash action — discoverable without the context menu (kept too).
+   Running rows keep their indicator; idle rows with unavailable deletion
+   keep the action disabled and expose the reason on its wrapper. */
+.session-row {
+  position: relative;
+}
+
+.session-delete {
+  position: absolute;
+  top: 50%;
+  right: var(--space-2);
+  transform: translateY(-50%);
+  opacity: 0;
+}
+
+.session-row:hover .session-delete,
+.session-row:focus-within .session-delete {
+  opacity: 1;
+}
+
+.session-row:hover .session-list-item-meta,
+.session-row:focus-within .session-list-item-meta {
+  opacity: 0;
+}
+
+.session-delete:hover .icon-btn:not(:disabled) {
+  background: var(--color-surface);
+  color: var(--color-danger-text);
+}
+
+/* A small two-tone ring occupies the trailing time slot while running. */
+.session-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.session-badge-running {
+  position: relative;
+  width: 14px;
+  height: 14px;
+  color: var(--color-muted);
+}
+
+.session-badge-running::before {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  border: 1px solid var(--color-border);
+  border-radius: 50%;
+}
+
+.session-badge-running svg {
+  animation: session-running-spin 0.9s linear infinite;
+}
+
+@keyframes session-running-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .session-badge-running svg { animation: none; }
+}
+
+/* ---- Context menu ---- */
+
+.sidebar-context-menu {
+  position: fixed;
+  z-index: 50;
+  width: 14rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  background: var(--color-paper);
+  padding: var(--space-1);
+}
+
+.sidebar-context-item {
+  appearance: none;
+  width: 100%;
+  text-align: left;
+  border: none;
+  border-radius: var(--radius-lg);
+  background: transparent;
+  color: var(--color-danger-text);
+  padding: var(--space-2) var(--space-3);
+  font: inherit;
+  font-size: var(--text-md);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s ease-out;
+}
+
+.sidebar-context-item:hover:not(:disabled) {
+  background: var(--color-surface);
+}
+
+.sidebar-context-item:disabled {
+  color: var(--color-muted);
+  cursor: not-allowed;
+}
+
+.sidebar-context-item:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* Why a disabled menuitem is disabled — Chromium shows no tooltip on
+   disabled buttons, so the reason is a visible line under the action. */
+.sidebar-context-reason {
+  margin: 0;
+  padding: 0 var(--space-3) var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--color-muted);
+}
+
+/* ---- Footer: settings popover mount + gear ---- */
+
+.sidebar-footer {
+  border-top: 1px solid var(--color-border);
+  padding: var(--space-2) var(--space-3);
+}
+
+/* Keep the fixed Settings dialog and its trigger above the scrim. */
+.sidebar-settings-mount {
+  position: relative;
+  z-index: 40;
+}
+
+/* The collapse shell clips overflow; release it while the popover is open. */
+.sidebar-shell-popover-open {
+  overflow: visible;
+}
+
+.sidebar-gear-row {
+  display: flex;
+  align-items: center;
+  padding-top: var(--space-1);
+}
+.sidebar-application-actions { display: flex; flex-shrink: 0; gap: var(--space-1); }
+.sidebar-gear-row .sidebar-settings-btn { min-width: 0; flex: 1; }
+
+/* Settings entry: a full-width quiet row (icon + label), not a lone gear —
+   the rail's footer reads as a destination, not a decoration. */
+.sidebar-settings-btn {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-muted);
+  font: inherit;
+  font-size: var(--text-lg);
+  font-weight: 400;
+  cursor: pointer;
+  transition:
+    color 0.15s ease-out,
+    background 0.15s ease-out;
+}
+
+.sidebar-settings-btn:hover {
+  background: var(--color-surface);
+  color: var(--color-ink);
+}
+
+.sidebar-settings-btn-active {
+  color: var(--color-ink);
+  background: var(--color-surface);
+}
+
+.sidebar-settings-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* ---- Narrow screens: rail stacks on top ---- */
+
+@media (max-width: 45rem) {
+  .sidebar-shell {
+    width: 100%;
+    transition: none;
+  }
+
+  .sidebar-shell-collapsed {
+    display: none;
+  }
+
+  .sidebar {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid var(--color-border);
+  }
+}

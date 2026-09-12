@@ -1,0 +1,40 @@
+/* Shared modal overlay (shell/overlay.tsx). The backdrop dims the shell; the
+   dialog inherits its surface from the caller's className when provided. */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: var(--space-6);
+  background: color-mix(in srgb, var(--color-ink) 32%, transparent);
+}
+
+.modal-dialog {
+  width: min(32rem, 100%);
+  box-sizing: border-box;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  background: var(--color-paper);
+  padding: var(--space-6);
+  outline: none;
+}
+
+/* Default dialog interior rhythm (title / copy / right-aligned actions). */
+.modal-title {
+  margin: 0;
+  font-size: var(--text-xl);
+}
+
+.modal-copy {
+  margin: var(--space-4) 0 0;
+  line-height: 1.5;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  margin-top: var(--space-6);
+}

@@ -1,0 +1,378 @@
+/* Desktop Shell: collapsible Sidebar + wide Workspace Pane,
+   chrome header, app-level error banner, empty state, composer dock overlay.
+   neo-coworker design language on wikilot tokens. */
+
+.shell {
+  position: relative;
+  display: flex;
+  height: 100%;
+  min-height: 100vh;
+  min-width: 0;
+  width: 100%;
+  background: var(--color-paper);
+  color: var(--color-ink);
+}
+
+/* Wide mode keeps the Pane geometry fixed and moves Session chrome into the
+   prototype's floating bottom stack. */
+.shell-wide .shell-main { display: none; }
+.shell-wide .workspace-pane {
+  flex: 1;
+  width: auto;
+  min-width: 20rem;
+  border-left: 0;
+}
+.shell-wide .workspace-pane-wide { width: auto; }
+
+/* ---- Sidebar column resizer ---- */
+
+.shell-resizer {
+  flex-shrink: 0;
+  width: var(--space-1);
+  cursor: col-resize;
+  background: transparent;
+  transition: background 0.15s ease-out;
+}
+
+.shell-resizer:hover,
+.shell-resizer:focus-visible {
+  background: color-mix(in srgb, var(--color-highlight) 45%, transparent);
+  outline: none;
+}
+
+/* Width transitions would lag behind the pointer during a drag. */
+.shell-resizing .sidebar-shell {
+  transition: none;
+}
+
+/* ---- Main pane ---- */
+
+.shell-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---- Chrome header (height/padding aligned with Sidebar + Workspace Pane) ---- */
+
+.shell-chrome {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  height: var(--header-h);
+  box-sizing: border-box;
+  padding: 0 var(--header-px);
+  border-bottom: 1px solid var(--color-border);
+  background: color-mix(in srgb, var(--color-paper) 85%, transparent);
+}
+
+.shell-chrome-titles {
+  flex: 1;
+  min-width: 0;
+}
+
+.shell-title {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-2xl);
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+}
+
+.shell-chrome-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* ---- Body: timeline + composer dock ---- */
+
+.shell-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.shell-timeline {
+  --timeline-scrollbar-bottom: calc(var(--radius-2xl) + var(--space-2));
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---- App-level error banner (workspace / session errors) ---- */
+
+.shell-error-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  width: calc(100% - 2 * var(--space-6));
+  max-width: calc(48rem - 2 * var(--space-6));
+  box-sizing: border-box;
+  margin: var(--space-4) auto 0;
+  border: 1px solid color-mix(in srgb, var(--color-danger) 35%, transparent);
+  border-radius: var(--radius-xl);
+  background: color-mix(in srgb, var(--color-danger) 10%, transparent);
+  color: var(--color-danger-text);
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--text-md);
+}
+
+/* ---- Empty state (no workspace) ---- */
+
+.shell-empty {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 var(--space-6);
+}
+
+.shell-empty-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 26rem;
+  text-align: center;
+  transform: translateY(calc(-1 * var(--space-8)));
+}
+
+.shell-empty-inner > .btn-secondary {
+  margin-top: var(--space-5);
+}
+
+/* Empty-state headline: the reading voice (serif) carries the one brand
+   moment on an otherwise blank canvas. */
+.shell-empty-title {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: var(--text-4xl);
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--color-ink);
+  text-wrap: balance;
+}
+
+/* Getting-started steps: a quiet checklist whose only actionable element is
+   the current step — it deep-links to where the action lives (PATH field,
+   Settings, Composer). The current step carries the pine number tile. */
+.shell-empty-steps {
+  list-style: none;
+  margin: var(--space-6) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  min-width: 16rem;
+}
+
+.shell-empty-steps > li {
+  border-top: 1px solid var(--color-border);
+}
+
+.shell-empty-steps > li:last-child {
+  border-bottom: 1px solid var(--color-border);
+}
+
+.shell-empty-step {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-1);
+  font-size: var(--text-md);
+  color: var(--color-muted);
+  text-align: left;
+}
+
+/* Current-step button: no new chrome — the affordance is an underline on
+   the label at hover, nothing more. */
+.shell-empty-step-btn {
+  appearance: none;
+  width: 100%;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.shell-empty-step-btn:hover .shell-empty-step-label {
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.shell-empty-step-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: var(--radius-sm);
+}
+
+.shell-empty-step-no {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--space-5);
+  height: var(--space-5);
+  flex-shrink: 0;
+  border: 1px solid var(--color-decoration);
+  border-radius: var(--radius-pill);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  color: var(--color-muted);
+}
+
+.shell-empty-step-active {
+  color: var(--color-ink);
+}
+
+/* The current step is the one actionable row: its number tile goes pine —
+   the language's live/actionable color — so clickability doesn't hide
+   behind a hover lottery. */
+.shell-empty-step-active .shell-empty-step-no {
+  border-color: var(--color-highlight);
+  background: var(--color-highlight);
+  color: var(--color-paper);
+}
+
+/* Empty-Timeline block (workspace open, no turns yet): the same checklist
+   motif as the welcome screen, pinned to the step the user is actually on. */
+.shell-empty-hint-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-5);
+  padding: 0 var(--space-6);
+  transform: translateY(calc(-1 * var(--space-8)));
+}
+
+/* The scroll viewport extends beneath the card's top corners. Only the
+   rounded card covers content; the dock adds no rectangular paper band. */
+.shell-composer-dock {
+  position: relative;
+  z-index: 30;
+  margin-top: calc(-1 * var(--radius-2xl));
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0 var(--space-6) var(--space-3);
+}
+
+/* The card matches the Timeline's reading column exactly — 48rem minus the
+   shell's --space-6 insets, centered at any window width — and keeps the
+   notice pill glued to the card's left edge. */
+.shell-composer-column {
+  pointer-events: auto;
+  width: 100%;
+  max-width: calc(48rem - 2 * var(--space-6));
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.shell-composer-column > .composer {
+  align-self: stretch;
+}
+
+/* ---- Run-finished notice: cancelled stays neutral, failed turns danger
+   (text + dot) so the two outcomes are distinguishable at a glance.
+   Self-contained pill stacked above the card inside the dock. ---- */
+
+.run-finished {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-2);
+  box-sizing: border-box;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-paper);
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--text-md);
+  font-weight: 500;
+  color: var(--color-muted);
+}
+
+.run-finished-dot {
+  width: var(--space-2);
+  height: var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--color-muted);
+}
+
+.run-finished-failed {
+  border-color: color-mix(in srgb, var(--color-danger) 35%, transparent);
+  color: var(--color-danger-text);
+}
+
+.run-finished-failed .run-finished-dot {
+  background: var(--color-danger-text);
+}
+
+/* Project behavior is gated before the first Worker starts. The dialog rides
+   the shared Modal (shell/overlay); these are its interior styles. */
+.trust-dialog {
+  width: min(32rem, 100%);
+  box-sizing: border-box;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  background: var(--color-paper);
+  padding: var(--space-6);
+  outline: none;
+}
+
+.trust-dialog h2 {
+  margin: 0;
+  font-size: var(--text-xl);
+}
+
+.trust-dialog-path {
+  margin: var(--space-3) 0 0;
+  overflow-wrap: anywhere;
+  color: var(--color-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+
+.trust-dialog-copy {
+  margin: var(--space-4) 0 0;
+  line-height: 1.5;
+}
+
+.trust-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  margin-top: var(--space-6);
+}
+
+.shell-timeline .timeline-scroll {
+  padding-inline: max(var(--space-6), calc((100% - 45rem) / 2));
+  padding-bottom: calc(var(--radius-2xl) + var(--space-2));
+}
+
+.shell-timeline .timeline-fab {
+  bottom: calc(var(--radius-2xl) + var(--space-4));
+}
+
+.shell-error-banner > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.shell-error-banner > .icon-btn { flex-shrink: 0; color: inherit; }
+
+.shell-compact .sidebar-shell {
+  position: absolute;
+  inset: 0 auto 0 0;
+  z-index: 41;
+  width: min(var(--sidebar-width), calc(100vw - 3rem));
+}
+.shell-compact .sidebar-shell-collapsed { width: 0; visibility: hidden; }
+.shell-compact .sidebar { width: 100%; }
+.shell-rail-backdrop { position: absolute; inset: 0; z-index: 40; border: 0; background: var(--color-scrim); }
+.shell-session-switch { font-size: var(--text-sm); padding: var(--space-1) var(--space-2); }
+.shell-compact.shell-wide .workspace-pane { min-width: 0; }

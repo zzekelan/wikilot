@@ -1,0 +1,46 @@
+.context-usage { position: relative; flex: 0 0 auto; }
+.context-usage-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--control-h);
+  height: var(--control-h);
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-md);
+  cursor: default;
+}
+.context-usage-trigger:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.context-usage-track { stroke: var(--color-border); }
+.context-usage-fill { stroke: var(--color-muted); }
+.context-usage-unknown { stroke: var(--color-decoration); }
+.context-usage-spinning { animation: context-usage-spin 1.5s linear infinite; }
+@keyframes context-usage-spin {
+  to { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .context-usage-spinning { animation: none; }
+}
+.context-usage-details {
+  display: none;
+  position: absolute;
+  bottom: calc(100% + var(--space-2));
+  left: 0;
+  z-index: 30;
+  width: max-content;
+  max-width: min(320px, 75vw);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-paper);
+  color: var(--color-muted);
+  font-size: var(--text-xs);
+}
+.context-usage-details::after {
+  content: ""; position: absolute; inset: 100% 0 auto; height: var(--space-2);
+}
+.context-usage[data-open] .context-usage-details { display: block; }
+.context-usage-details strong { color: var(--color-ink); font-weight: 500; }
+.context-usage-details dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-2) var(--space-4); margin: var(--space-3) 0 0; }
+.context-usage-details dd { margin: 0; text-align: right; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }

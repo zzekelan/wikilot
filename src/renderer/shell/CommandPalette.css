@@ -1,0 +1,133 @@
+/* Command Palette (neo-coworker): top-anchored overlay, backdrop click-close,
+   query input, filtered shortcut list with kbd chips. */
+
+.palette-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 15vh;
+}
+
+.palette-backdrop {
+  position: fixed;
+  inset: 0;
+  background: var(--color-scrim);
+}
+
+.palette-panel {
+  position: relative;
+  z-index: 50;
+  width: 100%;
+  max-width: 46rem;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  background: var(--color-surface);
+}
+
+.palette-input-row {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--color-border);
+  padding: var(--space-3) var(--space-4);
+}
+
+.palette-input {
+  appearance: none;
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: var(--color-ink);
+  font: inherit;
+  font-size: var(--text-xl);
+  outline: none;
+}
+
+.palette-input::placeholder {
+  color: var(--color-subtle);
+  opacity: 1;
+}
+
+.palette-list {
+  max-height: 18.75rem;
+  overflow-y: auto;
+  padding: var(--space-2) 0;
+}
+
+.palette-empty {
+  padding: var(--space-4) 0;
+  text-align: center;
+  font-size: var(--text-md);
+  color: var(--color-subtle);
+}
+
+.palette-items {
+  list-style: none;
+  margin: 0;
+  padding: 0 var(--space-2);
+}
+
+.palette-item {
+  appearance: none;
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  border: none;
+  border-radius: var(--radius-lg);
+  background: transparent;
+  color: var(--color-ink);
+  padding: var(--space-2) var(--space-3);
+  font: inherit;
+  font-size: var(--text-md);
+  cursor: pointer;
+  transition: background 0.15s ease-out;
+}
+
+.palette-item-selected {
+  background: color-mix(in srgb, var(--color-highlight) 18%, transparent);
+}
+
+.palette-item:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.palette-kbds {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-sm);
+}
+.palette-platform { display: inline-flex; align-items: center; gap: var(--space-1); }
+.palette-platform small { color: var(--color-faint); font-size: var(--text-xs); white-space: nowrap; }
+
+/* Key caps come from the shared .kbd recipe (controls.css); on the selected
+   row they lift to the panel surface. */
+.palette-item-selected .kbd {
+  border-color: transparent;
+  background: var(--color-surface);
+  color: var(--color-ink);
+}
+
+/* Footer hint bar: the palette's three keys, same kbd chips as the list. */
+.palette-footer {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  border-top: 1px solid var(--color-border);
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--color-subtle);
+  user-select: none;
+}
+
+.palette-footer span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}

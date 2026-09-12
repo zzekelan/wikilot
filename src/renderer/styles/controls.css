@@ -1,0 +1,255 @@
+/* Shared controls: the single implementation of the ghost icon button, the
+   secondary button, and the form primitives (label / input / select /
+   checkbox) used by the Sidebar workspace form and the Settings panel.
+   View-specific styles stay beside their view; only cross-view primitives
+   live here. */
+
+/* ---- Ghost icon button (one implementation for chrome, sidebar, workspace,
+   copy, and PDF toolbar buttons) ---- */
+
+.icon-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-muted);
+  cursor: pointer;
+  transition:
+    color 0.15s ease-out,
+    background 0.15s ease-out,
+    opacity 0.15s ease-out;
+}
+
+.icon-btn:hover:not(:disabled) {
+  background: var(--color-surface);
+  color: var(--color-ink);
+}
+
+.icon-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.icon-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.icon-btn-copied {
+  color: var(--color-success);
+}
+
+/* ---- Secondary button for settings forms and Workspace changes. The
+   ink-filled tier is reserved for the current primary action. ---- */
+
+.btn-secondary {
+  appearance: none;
+  border: 1px solid var(--color-decoration);
+  border-radius: var(--radius-lg);
+  background: var(--color-paper);
+  color: var(--color-ink);
+  padding: var(--space-2) var(--space-3);
+  font: inherit;
+  font-size: var(--text-md);
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease-out,
+    background 0.15s ease-out;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  border-color: var(--color-muted);
+  background: var(--color-surface);
+}
+
+.btn-secondary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.btn-secondary:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* ---- Primary button (one per screen at most): ink-filled. Used for the
+   Composer send slot and for Open Workspace while no Workspace is open —
+   once a Workspace exists, that button drops back to the secondary tier. ---- */
+
+.btn-primary {
+  appearance: none;
+  border: 1px solid var(--color-ink);
+  border-radius: var(--radius-lg);
+  background: var(--color-ink);
+  color: var(--color-paper);
+  padding: var(--space-2) var(--space-3);
+  font: inherit;
+  font-size: var(--text-md);
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background 0.15s ease-out,
+    opacity 0.15s ease-out;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-ink) 85%, var(--color-paper));
+}
+
+/* Disabled primary: a quiet outlined tile, not a faded ink block. */
+.btn-primary:disabled {
+  border-color: var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-muted);
+  cursor: not-allowed;
+}
+
+.btn-primary:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* ---- Danger button: destructive confirmations only (delete dialogs). ---- */
+
+.btn-danger {
+  appearance: none;
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-lg);
+  background: var(--color-danger);
+  color: #fff;
+  padding: var(--space-2) var(--space-3);
+  font: inherit;
+  font-size: var(--text-md);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s ease-out;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-danger) 85%, var(--color-ink));
+}
+
+.btn-danger:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.btn-danger:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* ---- Form primitives ---- */
+
+/* Field labels stay quiet: small mixed-case, not section eyebrows. */
+.workspace-label {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--color-muted);
+}
+
+.workspace-input {
+  appearance: none;
+  border: 1px solid var(--color-decoration);
+  border-radius: var(--radius-lg);
+  background: var(--color-paper);
+  color: var(--color-ink);
+  padding: var(--space-2) var(--space-3);
+  font: inherit;
+  font-size: var(--text-md);
+}
+
+.workspace-input::placeholder {
+  color: var(--color-faint);
+  opacity: 1;
+}
+
+.workspace-input:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* Path- and credential-typed fields speak the mono voice, like the read-only
+   path/key displays elsewhere. */
+.workspace-input-mono {
+  font-family: var(--font-mono);
+}
+
+/* Custom select: native chrome replaced with a chevron in the muted text
+   tone (per-theme, since background images can't currentColor). */
+.settings-select {
+  padding-right: var(--space-6);
+  cursor: pointer;
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="%235d574a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>');
+  background-repeat: no-repeat;
+  background-position: right var(--space-3) center;
+}
+
+:root.dark .settings-select {
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="%23a39b8b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>');
+}
+
+/* Custom checkbox: ink-filled check on paper, themed via mask so the glyph
+   always contrasts the fill. */
+.checkbox {
+  appearance: none;
+  position: relative;
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
+  flex-shrink: 0;
+  border: 1px solid var(--color-decoration);
+  border-radius: var(--radius-sm);
+  background: var(--color-paper);
+  cursor: pointer;
+  transition:
+    background 0.15s ease-out,
+    border-color 0.15s ease-out;
+}
+
+.checkbox:checked {
+  border-color: var(--color-ink);
+  background: var(--color-ink);
+}
+
+.checkbox:checked::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--color-paper);
+  mask: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>') center / 0.75rem no-repeat;
+}
+
+.checkbox:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.checkbox:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* ---- Key cap: the one recipe for physical keys (palette list + footer,
+   Composer hints). Inline code keeps the borderless .md-code tile —
+   different semantic, different look (see MarkdownText.css). ---- */
+
+.kbd {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-paper);
+  color: var(--color-muted);
+  padding: var(--space-05) var(--space-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  line-height: 1.2;
+}

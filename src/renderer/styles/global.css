@@ -1,0 +1,70 @@
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-size: var(--text-lg);
+  line-height: 1.6;
+}
+
+/* Selection joins the palette: a quiet pine wash instead of the OS default. */
+::selection {
+  background: color-mix(in srgb, var(--color-highlight) 22%, transparent);
+}
+
+/* Keep geometry stable while the thumb disappears at rest. */
+*::-webkit-scrollbar {
+  width: 0.375rem;
+  height: 0.375rem;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: var(--radius-sm);
+}
+
+[data-scrolling]::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+}
+
+/* Streaming caret blink (soft square wave). */
+@keyframes stream-caret {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* Constant-motion indicators signal state; under reduced motion they hold
+   their visible end state instead of animating. */
+@media (prefers-reduced-motion: reduce) {
+  .msg-text-live .md-root > p:last-child::after,
+  .msg-text-live .md-root > ul:last-child > li:last-child::after,
+  .msg-text-live .md-root > ol:last-child > li:last-child::after {
+    animation: none;
+  }
+}
+
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+  }
+  [data-scrolling] {
+    scrollbar-color: var(--color-border) transparent;
+  }
+}

@@ -1,0 +1,428 @@
+/* Composer: in-flow footer card below the Timeline + status strip.
+   neo-coworker design language on wikilot tokens. */
+
+.composer {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---- Card ---- */
+
+.composer-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: visible;
+  border-radius: var(--radius-2xl);
+  border: 1px solid var(--color-border);
+  background: var(--color-paper);
+  transition:
+    border-color 0.2s ease-out;
+}
+
+/* composer-card-busy has no visual treatment of its own; it exists so the
+   focus ring below does not light the card while the Cancel button inside it
+   is focused mid-run. */
+.composer-card:not(.composer-card-busy):focus-within {
+  border-color: color-mix(in srgb, var(--color-highlight) 50%, transparent);
+}
+
+/* Disabled (setup incomplete): the card recedes to a quiet surface tray —
+   clearly inert without looking broken. */
+.composer-card-disabled {
+  background: color-mix(in srgb, var(--color-surface) 45%, var(--color-paper));
+  box-shadow: none;
+}
+
+.composer-input {
+  appearance: none;
+  width: 100%;
+  box-sizing: border-box;
+  border: none;
+  background: transparent;
+  color: var(--color-ink);
+  padding: var(--space-3) var(--space-4) var(--space-2);
+  font: inherit;
+  font-size: var(--text-lg);
+  line-height: 1.6;
+  resize: none;
+  /* Never a horizontal scrollbar — the textarea soft-wraps; long input
+     wraps instead of scrolling sideways. */
+  overflow-x: hidden;
+  overflow-y: auto;
+  outline: none;
+  min-height: var(--composer-input-min-h);
+  max-height: var(--composer-input-max-h);
+}
+
+.composer-input::placeholder {
+  color: var(--color-faint);
+  opacity: 1;
+}
+
+.composer-input:disabled {
+  cursor: not-allowed;
+}
+
+/* ---- Primary slot: send ↔ cancel swap inside the status strip. Ink-filled,
+   never inverted on hover. Cancel deliberately does NOT use danger red — it
+   is a stop action, not a destructive one. ---- */
+
+.composer-send {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--control-h);
+  height: var(--control-h);
+  flex-shrink: 0;
+  border: none;
+  border-radius: var(--radius-lg);
+  background: var(--color-ink);
+  color: var(--color-paper);
+  padding: 0;
+  cursor: pointer;
+  transition:
+    background 0.15s ease-out,
+    opacity 0.15s ease-out;
+}
+
+.composer-send:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-ink) 85%, var(--color-paper));
+}
+
+/* Disabled send: the same quiet outlined tile as the disabled primary
+   button — a faded ink block reads as "enabled but grayed". */
+.composer-send:disabled {
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-muted);
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+.composer-send:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.composer-model-chip-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* ---- Error (opaque tint banner: solid paper base, no bleed-through) ---- */
+
+.composer-error {
+  margin: var(--space-2) 0 0;
+  border: 1px solid color-mix(in srgb, var(--color-danger) 35%, transparent);
+  border-radius: var(--radius-xl);
+  background: color-mix(in srgb, var(--color-danger) 10%, var(--color-paper));
+  color: var(--color-danger-text);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-md);
+}
+
+/* ---- Status strip: the card's footer bar. Lives INSIDE the card so the
+   whole composer is one opaque unit — nothing scrolls behind floating text.
+   Surface tint + bottom corners follow the card's radius. ---- */
+
+.composer-status {
+  min-height: var(--composer-status-h);
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  border-top: 1px solid color-mix(in srgb, var(--color-border) 60%, transparent);
+  border-radius: 0 0 var(--radius-2xl) var(--radius-2xl);
+  background: color-mix(in srgb, var(--color-surface) 45%, transparent);
+  padding: var(--space-1) var(--space-2) var(--space-1) var(--space-3);
+  font-size: var(--text-xs);
+  color: var(--color-subtle);
+}
+
+/* ---- Status strip controls: flat text buttons, no card tiles. ---- */
+
+.composer-model-chip {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  min-height: var(--control-h);
+  box-sizing: border-box;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-subtle);
+  padding: var(--space-05) var(--space-2);
+  font: inherit;
+  font-size: var(--text-xs);
+  cursor: pointer;
+  transition:
+    color 0.15s ease-out,
+    background 0.15s ease-out;
+}
+
+.composer-model-chip:hover:not(:disabled) {
+  background: var(--color-surface);
+  color: var(--color-ink);
+}
+
+.composer-model-control {
+  position: relative;
+  min-width: 0;
+}
+
+.composer-chip-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The Effort half of the combined chip recedes, like Codex's "5.6 Luna Max". */
+.composer-chip-effort {
+  flex-shrink: 0;
+  color: var(--color-faint);
+}
+
+.composer-chip-chevron {
+  flex-shrink: 0;
+  color: var(--color-faint);
+}
+
+.composer-picker-option .composer-chip-chevron {
+  margin-left: auto;
+}
+
+/* ---- Command menu: an in-flow drawer at the card's top edge. ---- */
+
+.composer-command-menu {
+  max-height: min(var(--overlay-menu-max-h), 45vh);
+  overflow-y: auto;
+  border-bottom: 1px solid var(--color-border);
+  border-radius: var(--radius-2xl) var(--radius-2xl) 0 0;
+  background: color-mix(in srgb, var(--color-surface) 45%, transparent);
+  padding: var(--space-1);
+}
+
+.composer-command-picker-heading {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  color: var(--color-muted);
+  font-size: var(--text-md);
+}
+
+.composer-command-picker-heading span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Model and Effort open in a detached drawer above the Composer. The card
+   keeps its height while the drawer grows upward over the Timeline. */
+.composer-picker {
+  position: absolute;
+  z-index: 60;
+  right: 0;
+  bottom: calc(100% + var(--space-2));
+  width: min(20rem, calc(100vw - 2 * var(--space-4)));
+  box-sizing: border-box;
+  max-height: min(var(--overlay-menu-max-h), 45vh);
+  overflow-y: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  background: color-mix(in srgb, var(--color-surface) 45%, var(--color-paper));
+  padding: var(--space-1);
+  animation: composer-picker-in 0.15s ease-out;
+}
+
+.composer-effort-picker {
+  position: fixed;
+  right: auto;
+  bottom: auto;
+  width: 10rem;
+}
+
+/* Rows are borderless tiles; the keyboard cursor (and hover) fills them.
+   aria-selected marks the applied value and carries the check icon. */
+.composer-command-option,
+.composer-picker-option {
+  appearance: none;
+  display: flex;
+  width: 100%;
+  box-sizing: border-box;
+  align-items: center;
+  gap: var(--space-2);
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-ink);
+  padding: var(--space-2);
+  text-align: left;
+  font: inherit;
+  font-size: var(--text-md);
+  cursor: pointer;
+}
+
+.composer-command-option:hover,
+.composer-command-option-active,
+.composer-picker-option:hover,
+.composer-picker-option-active {
+  background: var(--color-surface);
+}
+
+.composer-command-option-disabled,
+.composer-command-option-disabled:hover {
+  background: transparent;
+  color: var(--color-muted);
+  cursor: not-allowed;
+}
+
+.composer-command-icon {
+  flex-shrink: 0;
+  color: var(--color-faint);
+}
+
+.composer-command-label {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.composer-command-description {
+  min-width: 0;
+  margin-left: auto;
+  overflow: hidden;
+  color: var(--color-muted);
+  font-size: var(--text-xs);
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-picker-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-picker-check {
+  flex-shrink: 0;
+  color: var(--color-highlight-text);
+}
+
+.composer-picker-options {
+  display: flex;
+  flex-direction: column;
+}
+
+.composer-picker-empty {
+  margin: 0;
+  color: var(--color-muted);
+  padding: var(--space-3);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+}
+
+/* ---- Status strip state ---- */
+
+.composer-model-chip-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.composer-model-chip-pending,
+.composer-model-chip-pending:hover:not(:disabled) {
+  color: var(--color-highlight-text);
+}
+
+@media (max-width: 48rem) {
+  .composer-status {
+    align-items: flex-end;
+  }
+}
+
+.composer-status-right {
+  margin-left: auto;
+  display: flex;
+  min-width: 0;
+  flex-shrink: 1;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.composer-clips { margin: var(--space-2) var(--space-4) 0; }
+
+/* Wide Workspace Composer: prototype 67's compact bar. It keeps the real
+   Composer behavior, but the controls that remain available through the
+   Command Menu do not compete with the one-line Prompt surface. */
+.composer-bar .composer-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  padding: var(--space-2);
+  animation: composer-bar-in 0.15s ease-out;
+}
+
+.composer-bar .composer-card-disabled {
+  background: var(--color-paper);
+}
+
+.composer-bar .composer-clips {
+  grid-column: 1 / -1;
+  margin: var(--space-1) var(--space-2);
+}
+
+.composer-bar .composer-input {
+  min-width: 0;
+  min-height: 1.75rem;
+  max-height: 10rem;
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-md);
+  line-height: 1.45;
+}
+
+.composer-bar .composer-status {
+  grid-column: 1 / -1;
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.composer-bar .composer-hints {
+  display: none;
+}
+
+.composer-bar .composer-status-right {
+  gap: 0;
+}
+
+.composer-bar .composer-command-menu {
+  grid-column: 1 / -1;
+}
+
+@keyframes composer-picker-in {
+  from { opacity: 0; transform: translateY(var(--space-1)); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes composer-bar-in {
+  from { opacity: 0; transform: translateY(var(--space-1)); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .composer-bar .composer-card { animation: none; }
+  .composer-picker { animation: none; }
+}
+
+.proto-rm .composer-bar .composer-card {
+  animation: none;
+  transition: none;
+}
+
+.composer-picker-empty p { margin: 0 0 var(--space-2); }
