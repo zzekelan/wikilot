@@ -3,7 +3,7 @@
    wikilot tokens. Shared controls (.icon-btn, .btn-secondary, .workspace-*)
    live in styles/controls.css. */
 
-/* ---- Collapse shell: fixed inner width, outer width animates ↔ 0.
+/* ---- Collapse shell: width animates between the full sidebar and an icon rail.
    --sidebar-width comes from the shell's drag resizer (default 16rem). ---- */
 
 .sidebar-shell {
@@ -15,14 +15,14 @@
 }
 
 .sidebar-shell-collapsed {
-  width: 0;
+  width: var(--sidebar-collapsed-width);
 }
 
 .sidebar {
   display: flex;
   flex-direction: column;
   height: 100%;
-  width: var(--sidebar-width, 16rem);
+  width: 100%;
   border-right: 1px solid var(--color-border);
   background: var(--color-rail);
   color: var(--color-muted);
@@ -485,21 +485,37 @@
   box-shadow: var(--focus-ring);
 }
 
-/* ---- Narrow screens: rail stacks on top ---- */
+/* Collapsed rail keeps primary actions at their expanded vertical positions. */
+.sidebar-shell-collapsed .sidebar-brand,
+.sidebar-shell-collapsed .workspace-bar-chevron,
+.sidebar-shell-collapsed .sidebar-segmented,
+.sidebar-shell-collapsed .session-list,
+.sidebar-shell-collapsed .file-tree-mount,
+.sidebar-shell-collapsed .sidebar-application-actions {
+  display: none;
+}
 
-@media (max-width: 45rem) {
-  .sidebar-shell {
-    width: 100%;
-    transition: none;
-  }
+/* Keep button names available to assistive technology when only icons show. */
+.sidebar-shell-collapsed .sidebar-primary-row-label,
+.sidebar-shell-collapsed .sidebar-settings-btn > span {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
 
-  .sidebar-shell-collapsed {
-    display: none;
-  }
-
-  .sidebar {
-    width: 100%;
-    border-right: none;
-    border-bottom: 1px solid var(--color-border);
-  }
+.sidebar-shell-collapsed .sidebar-header {
+  justify-content: center;
+  padding-inline: var(--space-2);
+}
+.sidebar-shell-collapsed .sidebar-body,
+.sidebar-shell-collapsed .sidebar-footer {
+  padding-inline: var(--space-2);
+}
+.sidebar-shell-collapsed .sidebar-primary-row,
+.sidebar-shell-collapsed .sidebar-settings-btn {
+  justify-content: center;
+  padding-inline: 0;
 }

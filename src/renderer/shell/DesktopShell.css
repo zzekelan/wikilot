@@ -371,7 +371,7 @@
   z-index: 41;
   width: min(var(--sidebar-width), calc(100vw - 3rem));
 }
-.shell-compact .sidebar-shell-collapsed { width: 0; visibility: hidden; }
+.shell-compact .sidebar-shell-collapsed { position: relative; width: var(--sidebar-collapsed-width); }
 .shell-compact .sidebar { width: 100%; }
 .shell-rail-backdrop { position: absolute; inset: 0; z-index: 40; border: 0; background: var(--color-scrim); }
 .shell-session-switch { font-size: var(--text-sm); padding: var(--space-1) var(--space-2); }

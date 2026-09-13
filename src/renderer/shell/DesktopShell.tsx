@@ -7,7 +7,7 @@ import {
   MAX_CONTEXT_CLIP_TOTAL_CHARACTERS,
 } from "../../shared/session";
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
-import { Command, Moon, PanelLeft, PanelRight, Sun, X } from "lucide-react";
+import { Command, Moon, PanelRight, Sun, X } from "lucide-react";
 import type { TimelineItem } from "../../shared/timeline";
 import type {
   KnownWorkspace,
@@ -87,6 +87,7 @@ const DEFAULT_SIDEBAR_WIDTH = 256;
 const DEFAULT_PANE_WIDTH = 640;
 const PANE_MIN_WIDTH = 320;
 const MAIN_MIN_WIDTH = 320;
+const COLLAPSED_SIDEBAR_WIDTH = 56;
 /** Snapshot writes settle after a short quiet period of Pane navigation. */
 const PANE_PERSIST_DEBOUNCE_MS = 400;
 let fallbackSelectionSequence = 0;
@@ -152,7 +153,7 @@ function clampPaneWidth(
   sidebarOpen: boolean,
 ): number {
   const availableWidth =
-    viewportWidth - (sidebarOpen ? sidebarWidth : 0) - MAIN_MIN_WIDTH;
+    viewportWidth - (sidebarOpen ? sidebarWidth : COLLAPSED_SIDEBAR_WIDTH) - MAIN_MIN_WIDTH;
   return Math.min(
     Math.max(PANE_MIN_WIDTH, availableWidth),
     Math.max(PANE_MIN_WIDTH, width),
@@ -1416,7 +1417,6 @@ export function DesktopShell() {
     </button>
   </>;
   const chromeActions = <>
-    {activePaneIsWide && !sidebarOpen ? <button ref={sidebarOpenRef} type="button" className="icon-btn" aria-label="Open Sidebar" title="Open Sidebar" onClick={() => toggleSidebar(true)}><PanelLeft size={18} /></button> : null}
     {compactLayout && workspaceTabs.visible ? <button type="button" className="btn-secondary shell-session-switch" onClick={toggleWorkspacePane}>Session</button> : null}
     {workspace ? <button type="button" className="icon-btn" onClick={toggleWorkspacePane}
       title={workspaceTabs.visible ? "Hide Workspace Pane" : "Show Workspace Pane"}
@@ -1432,7 +1432,8 @@ export function DesktopShell() {
       style={
         {
           "--sidebar-width": `${sidebarWidth}px`,
-          "--sidebar-offset": `${sidebarOpen && !compactLayout ? sidebarWidth : 0}px`,
+          "--sidebar-collapsed-width": `${COLLAPSED_SIDEBAR_WIDTH}px`,
+          "--sidebar-offset": `${sidebarOpen && !compactLayout ? sidebarWidth : COLLAPSED_SIDEBAR_WIDTH}px`,
           "--workspace-pane-width": `${clampPaneWidth(paneWidth, viewportWidth - 8, sidebarWidth, sidebarOpen)}px`,
           "--wide-content-inset": `${activePaneIsWide ? wideContentInset : 0}px`,
         } as CSSProperties
@@ -1442,8 +1443,8 @@ export function DesktopShell() {
       <Sidebar
         applicationActions={applicationActions}
         isOpen={sidebarOpen}
-        onClose={() => toggleSidebar(false)}
-        closeButtonRef={sidebarCloseRef}
+        onToggle={() => toggleSidebar(!sidebarOpen)}
+        toggleButtonRef={sidebarOpen ? sidebarCloseRef : sidebarOpenRef}
         workspace={workspace}
         selectedSession={selectedSession}
         sessions={sessions}
@@ -1484,18 +1485,6 @@ export function DesktopShell() {
       ) : null}
       <main className="shell-main">
         <header className="shell-chrome">
-          {!sidebarOpen ? (
-            <button
-              ref={sidebarOpenRef}
-              type="button"
-              className="icon-btn"
-              onClick={() => toggleSidebar(true)}
-              title="Open Sidebar"
-              aria-label="Open Sidebar"
-            >
-              <PanelLeft size={18} />
-            </button>
-          ) : null}
           <div className="shell-chrome-titles">
             <h1 className="shell-title">{chromeTitle}</h1>
           </div>

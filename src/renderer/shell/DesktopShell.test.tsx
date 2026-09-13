@@ -326,7 +326,7 @@ describe("Session running indicator", () => {
 });
 
 describe("DesktopShell Sidebar focus", () => {
-  it("moves focus between visible toggle buttons and makes the collapsed rail inert", async () => {
+  it("keeps the collapsed rail interactive and focuses its toggle", async () => {
     renderShell();
     const close = screen.getByRole("button", { name: "Close Sidebar" });
     const rail = screen.getByRole("complementary", { name: "Workspace rail" });
@@ -335,7 +335,9 @@ describe("DesktopShell Sidebar focus", () => {
 
     const open = screen.getByRole("button", { name: "Open Sidebar" });
     expect(document.activeElement).toBe(open);
-    expect(rail.parentElement?.hasAttribute("inert")).toBe(true);
+    expect(rail.parentElement?.hasAttribute("inert")).toBe(false);
+    expect(rail.parentElement?.classList.contains("sidebar-shell-collapsed")).toBe(true);
+    expect(screen.getByRole("button", { name: "Settings" })).toBeTruthy();
 
     fireEvent.click(open);
     expect(document.activeElement).toBe(close);
@@ -818,7 +820,7 @@ describe("DesktopShell Workspace Pane sizing", () => {
       (container.firstElementChild as HTMLElement).style.getPropertyValue(
         "--workspace-pane-width",
       ),
-    ).toBe("568px");
+    ).toBe("512px");
     Object.defineProperty(window, "innerWidth", { configurable: true, value: 640 });
     fireEvent(window, new Event("resize"));
     expect((container.firstElementChild as HTMLElement).style.getPropertyValue("--workspace-pane-width")).toBe("320px");

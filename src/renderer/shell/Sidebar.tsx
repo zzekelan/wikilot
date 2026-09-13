@@ -12,6 +12,7 @@ import {
   AlertCircle,
   Loader2,
   Network,
+  PanelLeft,
   PanelLeftClose,
   Plus,
   Settings2,
@@ -41,8 +42,8 @@ export function workspaceName(cwd: string): string {
 type SidebarProps = {
   applicationActions?: ReactNode;
   isOpen: boolean;
-  onClose: () => void;
-  closeButtonRef: Ref<HTMLButtonElement>;
+  onToggle: () => void;
+  toggleButtonRef: Ref<HTMLButtonElement>;
   workspace: WorkspaceSummary | null;
   /** Renderer-selected Session, if any (opening a Workspace clears it). */
   selectedSession: SelectedSession | null;
@@ -147,8 +148,8 @@ function getContextMenuStyle(position: { x: number; y: number }) {
 export function Sidebar({
   applicationActions,
   isOpen,
-  onClose,
-  closeButtonRef,
+  onToggle,
+  toggleButtonRef,
   workspace,
   selectedSession,
   sessions,
@@ -267,34 +268,28 @@ export function Sidebar({
 
   return (
     <div
-      inert={!isOpen}
-      className={
-        isOpen
-          ? settingsOpen
-            ? "sidebar-shell sidebar-shell-popover-open"
-            : "sidebar-shell"
-          : "sidebar-shell sidebar-shell-collapsed"
-      }
+      className={`sidebar-shell${isOpen ? "" : " sidebar-shell-collapsed"}${settingsOpen ? " sidebar-shell-popover-open" : ""}`}
     >
       <aside className="sidebar" aria-label="Workspace rail">
         <div className="sidebar-header">
           <span className="sidebar-brand">Wikilot</span>
           <button
-            ref={closeButtonRef}
+            ref={toggleButtonRef}
             type="button"
             className="icon-btn"
-            onClick={onClose}
-            title="Close Sidebar"
-            aria-label="Close Sidebar"
+            onClick={onToggle}
+            title={isOpen ? "Close Sidebar" : "Open Sidebar"}
+            aria-label={isOpen ? "Close Sidebar" : "Open Sidebar"}
+            aria-expanded={isOpen}
           >
-            <PanelLeftClose size={18} />
+            {isOpen ? <PanelLeftClose size={18} /> : <PanelLeft size={18} />}
           </button>
         </div>
 
         <div className="sidebar-body">
           <div className="workspace-area">
           <WorkspaceSwitcher
-            isOpen={isOpen && !settingsOpen}
+            isOpen={!settingsOpen}
             workspace={workspace}
             knownWorkspaces={knownWorkspaces}
             failedWorkspaceCwds={failedWorkspaceCwds}
@@ -310,6 +305,7 @@ export function Sidebar({
               className="session-create"
               data-testid="session-new"
               title="New Session (⌘N)"
+              aria-label="New Session"
               disabled={locked}
               icon={<Plus size={16} aria-hidden="true" />}
               label="New Session"
@@ -534,6 +530,7 @@ export function Sidebar({
                     : "sidebar-settings-btn"
                 }
                 onClick={() => onSettingsOpenChange(!settingsOpen)}
+                title="Settings"
                 aria-label="Settings"
                 aria-expanded={settingsOpen}
               >
