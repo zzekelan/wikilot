@@ -19,13 +19,18 @@ function escapedQuotedValue(value: string): string {
 }
 
 /**
- * Serialize immutable Clips without locator metadata. JSON string encoding
+ * Serialize immutable Clips with source page/line numbers, omitting navigation metadata. JSON string encoding
  * plus escaped markup characters keeps authored delimiters inert inside each block.
  */
 export function serializePromptForModel(prompt: StructuredPrompt): string {
   const clips = prompt.clips.map((clip, index) => [
     `<context_clip index="${index + 1}">`,
     `<source_path>${escapedQuotedValue(clip.source.path)}</source_path>`,
+    ...(clip.locator.kind === "pdf"
+      ? [`<source_pages>${JSON.stringify(clip.locator.spans.map((span) => span.page))}</source_pages>`]
+      : clip.locator.lineStart !== undefined
+        ? [`<source_lines>${JSON.stringify({ start: clip.locator.lineStart, end: clip.locator.lineEnd })}</source_lines>`]
+        : []),
     `<quoted_source>${escapedQuotedValue(clip.text)}</quoted_source>`,
     "</context_clip>",
   ].join("\n"));

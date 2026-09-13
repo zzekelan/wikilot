@@ -78,6 +78,50 @@ describe("Context Clip model Prompt", () => {
     })).toBe("/skill:research");
   });
 
+  it.each([
+    { mode: "reading" as const, lineStart: 3, lineEnd: 7 },
+    { mode: "editing" as const, lineStart: 1, lineEnd: 1 },
+    { mode: "reading" as const, lineStart: 3, lineEnd: undefined },
+  ])("includes captured Markdown line numbers: $mode $lineStart-$lineEnd", ({ mode, lineStart, lineEnd }) => {
+    const clip = prompt.clips[0]!;
+    if (clip.locator.kind !== "markdown") throw new Error("Expected Markdown fixture");
+    const serialized = serializePromptForModel({
+      ...prompt,
+      clips: [{ ...clip, source: { kind: "markdown", path: clip.source.path }, locator: { ...clip.locator, mode, lineStart, lineEnd } }],
+    });
+    expect(serialized).toContain(`<source_lines>${JSON.stringify({ start: lineStart, end: lineEnd })}</source_lines>`);
+    expect(serialized).not.toContain("<source_pages>");
+  });
+
+  it("omits unavailable Markdown line numbers instead of using character offsets", () => {
+    const serialized = serializePromptForModel(prompt);
+    expect(serialized).not.toContain("<source_lines>");
+    expect(serialized).not.toContain("<source_pages>");
+  });
+
+  it.each([[1], [3, 4], [3, 5]])("includes the actual PDF pages %j", (...pages) => {
+    const serialized = serializePromptForModel({
+      ...prompt,
+      clips: [{
+        source: { kind: "pdf", path: "sources/paper.pdf" },
+        text: pages.map((page) => `Excerpt on page ${page}`).join("\n"),
+        fingerprint: "secret-fingerprint",
+        locator: {
+          kind: "pdf",
+          spans: pages.map((page) => ({
+            page, start: 0, end: `Excerpt on page ${page}`.length,
+            exact: `Excerpt on page ${page}`, prefix: "secret-prefix", suffix: "secret-suffix",
+            boxes: [{ left: 0.1, top: 0.2, width: 0.3, height: 0.1 }],
+          })),
+        },
+      }],
+    });
+    expect(serialized).toContain(`<source_pages>${JSON.stringify(pages)}</source_pages>`);
+    expect(serialized).not.toContain("<source_lines>");
+    expect(serialized).not.toContain("secret-");
+    expect(serialized).not.toContain("boxes");
+  });
+
   it("always adds the quoted-source trust rule to the system Prompt", () => {
     const result = appendContextClipSystemPromptFragments(["Base system prompt"]);
     expect(result.join("\n")).toContain("Base system prompt");
