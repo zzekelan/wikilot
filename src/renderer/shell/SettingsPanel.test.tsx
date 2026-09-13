@@ -4,7 +4,8 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { SettingsPanel } from "./SettingsPanel";
 
 const fake = vi.hoisted(() => ({
-  client: { listProviders: vi.fn(), listCredentials: vi.fn(), getAppDefaults: vi.fn(), updateAppDefaults: vi.fn() },
+  client: { listProviders: vi.fn(), listCredentials: vi.fn(), getAppDefaults: vi.fn(), updateAppDefaults: vi.fn(),
+    getModelCatalog: vi.fn(), getReviewSettings: vi.fn(), updateReviewSettings: vi.fn() },
   gesture: vi.fn(),
 }));
 vi.mock("../client", () => ({ client: fake.client }));
@@ -15,6 +16,8 @@ beforeEach(() => {
   fake.client.listProviders.mockResolvedValue([]);
   fake.client.listCredentials.mockResolvedValue([]);
   fake.client.getAppDefaults.mockResolvedValue({ wikiPromptEnabled: true });
+  fake.client.getModelCatalog.mockResolvedValue([]);
+  fake.client.getReviewSettings.mockResolvedValue({ model: null });
 });
 afterEach(cleanup);
 
@@ -56,4 +59,35 @@ it("returns to the Providers directory when its category is selected again", asy
   fireEvent.click(screen.getByTestId("settings-section-providers"));
   expect(screen.queryByTestId("provider-form")).toBeNull();
   expect(screen.getByTestId("provider-add")).toBeTruthy();
+});
+
+it("saves and clears the separate Review Model without changing Session defaults", async () => {
+  fake.client.getModelCatalog.mockResolvedValue([{ id: "local", name: "Local", models: [
+    { id: "reviewer", name: "Reviewer", thinkingLevels: ["off"] },
+  ] }]);
+  fake.client.updateReviewSettings.mockImplementation(async (settings) => settings);
+  render(<SettingsPanel open onClose={vi.fn()} />);
+  const picker = screen.getByRole("combobox", { name: "Review Model" }) as HTMLSelectElement;
+  await waitFor(() => expect(picker.disabled).toBe(false));
+  fireEvent.change(picker, { target: { value: JSON.stringify({ provider: "local", model: "reviewer" }) } });
+  await waitFor(() => expect(fake.client.updateReviewSettings).toHaveBeenCalledWith({ model: { provider: "local", model: "reviewer" } }));
+  await waitFor(() => expect(picker.disabled).toBe(false));
+  fireEvent.change(picker, { target: { value: "" } });
+  await waitFor(() => expect(fake.client.updateReviewSettings).toHaveBeenCalledWith({ model: null }));
+  expect(fake.client.updateAppDefaults).not.toHaveBeenCalled();
+});
+
+it("preserves an unavailable Review Model and recovers from a failed save", async () => {
+  fake.client.getReviewSettings.mockResolvedValue({ model: { provider: "removed", model: "reviewer" } });
+  fake.client.updateReviewSettings.mockRejectedValueOnce(new Error("Cannot save review settings"));
+  render(<SettingsPanel open onClose={vi.fn()} />);
+  const picker = screen.getByRole("combobox", { name: "Review Model" }) as HTMLSelectElement;
+  await waitFor(() => expect(picker.disabled).toBe(false));
+  expect(picker.selectedOptions[0].textContent).toContain("unavailable");
+  fireEvent.change(picker, { target: { value: "" } });
+  await screen.findByText("Cannot save review settings");
+  expect(picker.selectedOptions[0].textContent).toContain("unavailable");
+  fake.client.updateReviewSettings.mockResolvedValueOnce({ model: null });
+  fireEvent.change(picker, { target: { value: "" } });
+  await waitFor(() => expect(picker.value).toBe(""));
 });

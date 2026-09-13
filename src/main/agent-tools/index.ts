@@ -6,12 +6,14 @@ import { prepareWebAccess } from "./web-access.ts";
 /** Provide Wikilot's built-in capabilities; the caller owns Pi's lifecycle. */
 export function createAgentTools(cwd: string, agentDir: string) {
   const reader = createPdfReader();
+  const webExtensionPath = prepareWebAccess(agentDir);
   return {
     customTools: [
       createInspectPdfTool(cwd, reader),
       createReadPdfTextTool(cwd, reader),
       createReadPdfPageTool(cwd, reader),
     ],
-    additionalExtensionPaths: [prepareWebAccess(agentDir)],
+    additionalExtensionPaths: [webExtensionPath],
+    trustedReadExtensionPaths: [webExtensionPath],
   };
 }

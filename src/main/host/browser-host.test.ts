@@ -111,6 +111,8 @@ function fakeApp(overrides: Partial<WikilotApplication>): WikilotApplication {
     setCredential: notImplemented,
     deleteCredential: notImplemented,
     getAppDefaults: notImplemented,
+    getReviewSettings: () => ({ model: null }),
+    updateReviewSettings: (settings) => settings,
     updateAppDefaults: notImplemented,
     prompt: notImplemented,
     abort: notImplemented,

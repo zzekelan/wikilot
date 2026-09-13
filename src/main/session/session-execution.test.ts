@@ -211,6 +211,27 @@ describe("Session execution (per-Session Runtime)", () => {
     expect(runtime.getStatusFor(active.workspaceId, active.sessionId)).toBe("unloaded");
   });
 
+  it("keeps the current Turn's access mode and applies a switch only after it settles", async () => {
+    let settle!: () => void;
+    const { active, runtime, workers, setSessionModelDefault } = setup({
+      prompt: () => new Promise<void>((resolve) => { settle = resolve; }),
+    });
+    const turn = runtime.prompt(active, "write a note");
+    await vi.waitFor(() => expect(settle).toBeDefined());
+    const result = await runtime.updateConfiguration(active, { accessMode: "full-access" });
+    expect(result).toMatchObject({ status: "pending", configuration: { accessMode: "full-access" } });
+    expect(workers[0].startParams?.config.accessMode).toBe("auto-review");
+    expect(workers[0].configure).not.toHaveBeenCalled();
+    workers[0].emitTimeline({ type: "agent_settled" });
+    await vi.waitFor(() => expect(workers[0].configure).toHaveBeenCalled());
+    settle();
+    await turn;
+    expect(workers[0].configure).toHaveBeenCalledWith(expect.objectContaining({ accessMode: "full-access" }));
+    expect(runtime.getConfiguration(active)).toMatchObject({ status: "applied", configuration: { accessMode: "full-access" } });
+    expect(setSessionModelDefault).not.toHaveBeenCalled();
+    await runtime.shutdown();
+  });
+
   it("fails fast on an unavailable model without spawning a Worker", async () => {
     const { active, runtime, workers } = setup({ modelAvailable: false });
     await expect(runtime.prompt(active, "hi")).rejects.toThrow(/Model not available/i);
@@ -495,6 +516,7 @@ describe("Session execution (per-Session Runtime)", () => {
     finishSecondStart?.();
     await vi.waitFor(() =>
       expect(workers[1]?.configure).toHaveBeenCalledWith({
+        accessMode: "auto-review",
         provider: "anthropic",
         model: "claude-sonnet-4-5",
         thinkingLevel: "high",
@@ -634,6 +656,7 @@ describe("Session execution (per-Session Runtime)", () => {
     finishSecondStart?.();
     await vi.waitFor(() =>
       expect(workers[1]?.configure).toHaveBeenCalledWith({
+        accessMode: "auto-review",
         provider: "openai",
         model: "gpt-4.1",
         thinkingLevel: "high",
@@ -717,6 +740,7 @@ describe("Session execution (per-Session Runtime)", () => {
     await runtime.prompt(active, "hello");
 
     expect(workers[0]?.startParams?.config).toEqual({
+      accessMode: "auto-review",
       provider: "openai",
       model: "gpt-4.1",
       thinkingLevel: "high",

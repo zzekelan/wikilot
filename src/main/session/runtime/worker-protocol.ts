@@ -7,7 +7,7 @@ import {
   decodeTimelineToolResult,
   type TimelineDelta,
 } from "../../../shared/timeline/index.ts";
-import type { SessionSkill } from "../../../shared/workspace";
+import type { AccessMode, SessionSkill } from "../../../shared/workspace";
 
 /**
  * Main ↔ Session Worker protocol. Messages cross Node IPC as JSON; every
@@ -29,6 +29,7 @@ export type WorkerSessionConfig = {
   model?: string;
   thinkingLevel: ThinkingLevel;
   wikiPromptEnabled: boolean;
+  accessMode?: AccessMode;
 };
 
 /** Serializable readiness returned after Worker resource preparation. */
@@ -241,7 +242,8 @@ export function decodeWorkerCommand(value: unknown): WorkerCommand | undefined {
         (config.model !== undefined && typeof config.model !== "string") ||
         (config.provider === undefined) !== (config.model === undefined) ||
         typeof config.thinkingLevel !== "string" ||
-        typeof config.wikiPromptEnabled !== "boolean"
+        typeof config.wikiPromptEnabled !== "boolean" ||
+        (config.accessMode !== undefined && config.accessMode !== "auto-review" && config.accessMode !== "full-access")
       ) {
         return undefined;
       }
@@ -262,6 +264,7 @@ export function decodeWorkerCommand(value: unknown): WorkerCommand | undefined {
           ...(typeof config.model === "string" ? { model: config.model } : {}),
           thinkingLevel: config.thinkingLevel as ThinkingLevel,
           wikiPromptEnabled: config.wikiPromptEnabled,
+          ...(config.accessMode !== undefined ? { accessMode: config.accessMode } : {}),
         },
       };
     }
@@ -284,7 +287,8 @@ export function decodeWorkerCommand(value: unknown): WorkerCommand | undefined {
         typeof config.provider === "string" &&
         typeof config.model === "string" &&
         typeof config.thinkingLevel === "string" &&
-        typeof config.wikiPromptEnabled === "boolean"
+        typeof config.wikiPromptEnabled === "boolean" &&
+        (config.accessMode === undefined || config.accessMode === "auto-review" || config.accessMode === "full-access")
         ? {
             type: "configure",
             requestId,
@@ -293,6 +297,7 @@ export function decodeWorkerCommand(value: unknown): WorkerCommand | undefined {
               model: config.model,
               thinkingLevel: config.thinkingLevel as ThinkingLevel,
               wikiPromptEnabled: config.wikiPromptEnabled,
+              ...(config.accessMode !== undefined ? { accessMode: config.accessMode } : {}),
             },
           }
         : undefined;

@@ -1,5 +1,6 @@
 import { normalizeStructuredPrompt } from "../../shared/session";
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { parseReviewSettings } from "../automatic-review";
 import {
   assertKnownFields,
   PROVIDER_INPUT_FIELDS,
@@ -17,6 +18,7 @@ import {
   type SessionCreateRequest,
   type SessionConfigurationRequest,
   type SessionConfigurationUpdateRequest,
+  type SessionConfigurationUpdate,
   type SessionDeleteRequest,
   type SessionAbortRequest,
   type SessionOpenRequest,
@@ -354,7 +356,7 @@ function readProviderInput(value: unknown): ProviderInput {
   };
 }
 
-function readSessionConfiguration(value: unknown) {
+function readSessionConfiguration(value: unknown): SessionConfigurationUpdate {
   if (value === undefined) return {};
   if (typeof value !== "object" || value === null) {
     throw new Error("configuration must be an object");
@@ -364,6 +366,10 @@ function readSessionConfiguration(value: unknown) {
   const model = input.model;
   const thinkingLevel = input.thinkingLevel;
   const wikiPromptEnabled = input.wikiPromptEnabled;
+  const accessMode = input.accessMode;
+  if (accessMode !== undefined && accessMode !== "auto-review" && accessMode !== "full-access") {
+    throw new Error("configuration.accessMode must be auto-review or full-access");
+  }
   if (provider !== undefined && (typeof provider !== "string" || !provider.trim())) {
     throw new Error("configuration.provider must be a non-empty string");
   }
@@ -387,6 +393,7 @@ function readSessionConfiguration(value: unknown) {
       ? { thinkingLevel: thinkingLevel as ThinkingLevel }
       : {}),
     ...(typeof wikiPromptEnabled === "boolean" ? { wikiPromptEnabled } : {}),
+    ...(accessMode === "auto-review" || accessMode === "full-access" ? { accessMode } : {}),
   };
 }
 
@@ -909,6 +916,16 @@ export function createBrowserHostMiddleware(
 
       if (req.method === "GET" && path === DEFAULTS_GET_PATH) {
         sendJson(res, 200, app.getAppDefaults());
+        return;
+      }
+
+      if (req.method === "GET" && path === "/api/review/settings") {
+        sendJson(res, 200, app.getReviewSettings());
+        return;
+      }
+
+      if (req.method === "POST" && path === "/api/review/settings") {
+        sendJson(res, 200, app.updateReviewSettings(parseReviewSettings(await readJsonBody(req))));
         return;
       }
 

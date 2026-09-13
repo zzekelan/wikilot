@@ -82,6 +82,36 @@ function renderComposer(sessionBusy = false) {
 }
 
 describe("Composer layout", () => {
+  it("places access mode beside Context and never marks an access-only change as Next", async () => {
+    const onConfigurationChange = vi.fn(async () => ({ status: "pending" as const, configuration: { accessMode: "full-access" as const } }));
+    const props = { enabled: true, sessionBusy: true, workspaceId: "workspace-1", sessionId: "session-1",
+      configuration: { provider: "local", model: "model", thinkingLevel: "off" as const },
+      configurationStatus: "applied" as const, onConfigurationChange };
+    const { rerender } = render(<Composer {...props} />);
+    const mode = screen.getByRole("button", { name: "Access mode: Auto Review" });
+    expect(screen.getByTestId("context-usage").closest(".context-usage")?.nextElementSibling?.contains(mode)).toBe(true);
+    fireEvent.click(mode);
+    fireEvent.click(screen.getByRole("menuitemradio", { name: /Full Access/ }));
+    await waitFor(() => expect(onConfigurationChange).toHaveBeenCalledWith({ accessMode: "full-access" }));
+    rerender(<Composer {...props} configuration={{ ...props.configuration, accessMode: "full-access" }} configurationStatus="pending" />);
+    expect(screen.getByRole("button", { name: "Access mode: Full Access" }).textContent).toBe("Full Access");
+    expect(screen.getByTestId("composer-model-chip").textContent).not.toContain("Next");
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  it("keeps access mode unchanged after a save failure and lets the user retry", async () => {
+    const onConfigurationChange = vi.fn().mockRejectedValueOnce(new Error("Could not save mode")).mockResolvedValueOnce({ status: "applied", configuration: { accessMode: "full-access" } });
+    render(<Composer enabled sessionBusy={false} workspaceId="workspace-1" sessionId="session-1"
+      configuration={{}} configurationStatus="applied" onConfigurationChange={onConfigurationChange} />);
+    fireEvent.click(screen.getByRole("button", { name: "Access mode: Auto Review" }));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: /Full Access/ }));
+    await screen.findByText("Could not save mode");
+    expect(screen.getByRole("menuitemradio", { name: /Auto Review/ }).getAttribute("aria-checked")).toBe("true");
+    fireEvent.click(screen.getByRole("menuitemradio", { name: /Full Access/ }));
+    await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
+    expect(onConfigurationChange).toHaveBeenCalledTimes(2);
+  });
+
   it("keeps a draft and its Clips while connecting a model and refreshing the catalog", async () => {
     const onModelAvailabilityChange = vi.fn();
     const props = {

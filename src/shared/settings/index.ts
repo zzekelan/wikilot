@@ -10,6 +10,7 @@ export type {
   AuthenticationType,
   AppDefaults,
   AppDefaultsUpdate,
+  ReviewSettings,
   CredentialListResponse,
   CredentialType,
   DeleteProviderRequest,

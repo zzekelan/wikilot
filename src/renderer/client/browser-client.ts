@@ -1,6 +1,7 @@
 import type {
   AppDefaults,
   AppDefaultsUpdate,
+  ReviewSettings,
   AuthenticationCancelRequest,
   AuthenticationRespondRequest,
   AuthenticationStartRequest,
@@ -370,6 +371,14 @@ export function createBrowserClient(): WikilotClient {
 
     getAppDefaults() {
       return fetchJson<AppDefaults>("/api/defaults");
+    },
+
+    getReviewSettings() {
+      return fetchJson<ReviewSettings>("/api/review/settings");
+    },
+
+    updateReviewSettings(settings: ReviewSettings) {
+      return postJson<ReviewSettings>("/api/review/settings", settings);
     },
 
     updateAppDefaults(patch: AppDefaultsUpdate) {

@@ -261,6 +261,7 @@ export function createSessionExecution(
       ...snapshot,
       wikiPromptEnabled:
         snapshot.wikiPromptEnabled ?? DEFAULT_APP_DEFAULTS.wikiPromptEnabled,
+      accessMode: snapshot.accessMode ?? "auto-review",
     };
   }
 
@@ -274,6 +275,7 @@ export function createSessionExecution(
       thinkingLevel: snapshot.thinkingLevel ?? "off",
       wikiPromptEnabled:
         snapshot.wikiPromptEnabled ?? DEFAULT_APP_DEFAULTS.wikiPromptEnabled,
+      accessMode: snapshot.accessMode ?? "auto-review",
     };
   }
 
@@ -784,6 +786,7 @@ export function createSessionExecution(
           thinkingLevel: next.thinkingLevel!,
           wikiPromptEnabled:
             next.wikiPromptEnabled ?? DEFAULT_APP_DEFAULTS.wikiPromptEnabled,
+          accessMode: next.accessMode ?? "auto-review",
         };
         pendingConfigurations.set(key, pending);
         if (confirmedModelSelection) saveSessionModelDefault(pending);
@@ -814,6 +817,7 @@ export function createSessionExecution(
           thinkingLevel: next.thinkingLevel!,
           wikiPromptEnabled:
             next.wikiPromptEnabled ?? DEFAULT_APP_DEFAULTS.wikiPromptEnabled,
+          accessMode: next.accessMode ?? "auto-review",
         };
         pendingConfigurations.set(key, applied);
         await applyPendingConfiguration(key, worker);
@@ -829,6 +833,7 @@ export function createSessionExecution(
           thinkingLevel: next.thinkingLevel!,
           wikiPromptEnabled:
             next.wikiPromptEnabled ?? DEFAULT_APP_DEFAULTS.wikiPromptEnabled,
+          accessMode: next.accessMode ?? "auto-review",
         };
         configurations.set(key, applied);
         if (confirmedModelSelection) saveSessionModelDefault(applied);
@@ -837,6 +842,7 @@ export function createSessionExecution(
           thinkingLevel: next.thinkingLevel ?? "off",
           wikiPromptEnabled:
             next.wikiPromptEnabled ?? DEFAULT_APP_DEFAULTS.wikiPromptEnabled,
+          accessMode: next.accessMode ?? "auto-review",
         });
       }
       return { status: "applied", configuration: next };

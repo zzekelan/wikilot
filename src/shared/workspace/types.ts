@@ -107,12 +107,15 @@ export type SessionSelectionRequest = {
   selectionToken: SessionSelectionToken;
 };
 
+export type AccessMode = "auto-review" | "full-access";
+
 /** Effective configuration persisted by one Session. */
 export type SessionConfiguration = {
   provider?: string;
   model?: string;
   thinkingLevel?: ThinkingLevel;
   wikiPromptEnabled?: boolean;
+  accessMode?: AccessMode;
 };
 
 export type SessionConfigurationUpdate = Partial<SessionConfiguration>;

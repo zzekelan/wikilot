@@ -5,6 +5,7 @@ import {
 import {
   type AppDefaults,
   type AppDefaultsUpdate,
+  type ReviewSettings,
   type AuthenticationCancelRequest,
   type AuthenticationRespondRequest,
   type AuthenticationStartRequest,
@@ -50,6 +51,7 @@ import {
   readTrustedProjectModelDefaults,
 } from "../models";
 import { createSessionModule, type SessionImageResult, type SessionModule } from "../session";
+import { createReviewSettingsStore } from "../automatic-review";
 import {
   recordAppDefaultsSave,
   recordCredentialSave,
@@ -165,6 +167,8 @@ export type WikilotApplication = {
   /** App Defaults for new Sessions, independent of existing Sessions. */
   getAppDefaults(): AppDefaults;
   updateAppDefaults(patch: AppDefaultsUpdate): AppDefaults;
+  getReviewSettings(): ReviewSettings;
+  updateReviewSettings(settings: ReviewSettings): ReviewSettings;
   prompt(prompt: StructuredPrompt): Promise<void>;
   abort(workspaceId: string, sessionId: string): Promise<void>;
   getSessionConfiguration(
@@ -215,6 +219,7 @@ export function createWikilotApplication(
   const projectTrust = options.projectTrust ?? createProjectTrustService(agentDir);
   const modelServices = createModelServices({ agentDir: options.agentDir });
   const defaultsStore = createAppDefaultsStore({ agentDir: options.agentDir });
+  const reviewSettings = createReviewSettingsStore(agentDir);
   const pendingProjectTrust = new Map<string, ProjectTrustRequest>();
   let sessions: SessionModule;
   const workspace = createWorkspaceModule({
@@ -457,6 +462,9 @@ export function createWikilotApplication(
       const authentication = await modelServices.getAuthentication();
       return authentication.cancel(request.sessionId);
     },
+
+    getReviewSettings: reviewSettings.read,
+    updateReviewSettings: reviewSettings.update,
 
     getAppDefaults() {
       return defaultsStore.read();

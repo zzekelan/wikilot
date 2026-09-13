@@ -176,6 +176,8 @@
   min-width: 0;
 }
 
+.composer-model-chip-btn { max-width: 100%; }
+
 .composer-chip-label {
   min-width: 0;
   overflow: hidden;

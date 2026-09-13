@@ -3,6 +3,7 @@ import type { ThinkingLevel } from "../../shared/settings";
 import {
   sessionConfigEntryData,
   WIKILOT_SESSION_ENTRY_TYPE,
+  type AccessMode,
 } from "../../shared/workspace";
 
 /**
@@ -16,6 +17,7 @@ export type SessionConfig = {
   model?: string;
   thinkingLevel?: ThinkingLevel;
   wikiPromptEnabled?: boolean;
+  accessMode?: AccessMode;
 };
 
 function stringField(value: unknown): string | undefined {
@@ -41,6 +43,7 @@ export function readSessionConfig(
     }
     const data = (entry.data ?? {}) as Record<string, unknown>;
     wikilot = {
+      accessMode: data.accessMode === "full-access" ? "full-access" : "auto-review",
       provider: stringField(data.provider),
       model: stringField(data.model),
       thinkingLevel: stringField(data.thinkingLevel) as
@@ -70,6 +73,7 @@ export function readSessionConfig(
         ? (stringField(context.thinkingLevel) as ThinkingLevel | undefined)
         : undefined),
     wikiPromptEnabled: wikilot.wikiPromptEnabled,
+    accessMode: wikilot.accessMode ?? "auto-review",
   };
 }
 

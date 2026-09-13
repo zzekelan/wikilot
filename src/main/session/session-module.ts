@@ -229,6 +229,7 @@ export function createSessionModuleWithAdapters(
 
     return {
       ...(sessionModel ?? {}),
+      accessMode: explicit.accessMode ?? "auto-review",
       wikiPromptEnabled:
         explicit.wikiPromptEnabled ??
         defaults.wikiPromptEnabled ??

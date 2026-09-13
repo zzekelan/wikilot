@@ -1,4 +1,5 @@
 export type {
+  AccessMode,
   KnownWorkspace,
   KnownWorkspaceListResponse,
   SessionAbortRequest,

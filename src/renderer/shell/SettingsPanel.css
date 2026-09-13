@@ -389,6 +389,9 @@
 .settings-model-advanced summary:focus-visible,
 .settings-provider-model-disclosure summary:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 
+.settings-review-model select { width: 14rem; max-width: 100%; flex-shrink: 0; }
+.settings-review-model .settings-error { margin-inline: 0; }
+
 @media (max-width: 42rem) {
   .settings-body { display: flex; flex-direction: column; }
   .settings-nav { flex-direction: row; padding: var(--space-2) var(--space-4); border-right: 0; border-bottom: 1px solid var(--color-border); }

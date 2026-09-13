@@ -24,6 +24,7 @@ import type {
 import { client } from "../client";
 import { ContextClipDetails } from "./ContextClipDetails";
 import { ContextUsage } from "./ContextUsage";
+import { AccessModePicker } from "./AccessModePicker";
 import type { SessionContextState } from "../../shared/timeline";
 import { pushEscapeLayer } from "../escape-stack";
 import {
@@ -238,6 +239,13 @@ export function Composer({
   const selectedModelLabel = modelLabel(configuration);
   const selectedModelDisplayLabel = modelDisplayLabel(configuration, modelOptions);
   const thinkingLevel = configuration.thinkingLevel ?? "off";
+  const modelSignature = JSON.stringify([configuration.provider, configuration.model, thinkingLevel]);
+  const appliedModel = useRef<{ sessionId: string | undefined; signature: string } | null>(null);
+  const modelPending = configurationStatus === "pending" &&
+    (appliedModel.current?.sessionId !== sessionId || appliedModel.current?.signature !== modelSignature);
+  useEffect(() => {
+    if (configurationStatus !== "pending") appliedModel.current = { sessionId, signature: modelSignature };
+  }, [configurationStatus, modelSignature, sessionId]);
   const effortOptions = useMemo(
     () =>
       (pendingModel ??
@@ -827,26 +835,31 @@ export function Composer({
           onKeyDown={onInputKeyDown}
         />
         <div className="composer-status">
-          {sessionId ? <ContextUsage context={context} loading={contextLoading} /> : null}
+          {sessionId ? <div className="composer-status-left">
+            <ContextUsage context={context} loading={contextLoading} />
+            <AccessModePicker key={sessionId} mode={configuration.accessMode ?? "auto-review"}
+              disabled={!enabled || !workspaceId}
+              onChange={(accessMode) => onConfigurationChange({ accessMode })} />
+          </div> : null}
           <div className="composer-status-right">
             <div ref={modelControlRef} className="composer-model-control">
               {!commandPicker ? picker : null}
               <button
                 type="button"
                 className={
-                  configurationStatus === "pending"
+                  modelPending
                     ? "composer-model-chip composer-model-chip-btn composer-model-chip-pending"
                     : "composer-model-chip composer-model-chip-btn"
                 }
                 data-testid="composer-model-chip"
                 title="Choose Session Model and Effort"
-                aria-label={configurationStatus === "pending" ? `Pending Session Model: ${selectedModelLabel}` : `Session Model: ${selectedModelLabel}`}
+                aria-label={modelPending ? `Pending Session Model: ${selectedModelLabel}` : `Session Model: ${selectedModelLabel}`}
                 aria-haspopup="listbox"
                 aria-expanded={pickerOpen && !commandPicker}
                 disabled={!enabled || !workspaceId || !sessionId}
                 onClick={() => void togglePicker()}
               >
-                {configurationStatus === "pending" ? "Next · " : ""}
+                {modelPending ? "Next · " : ""}
                 <span className="composer-chip-label">{selectedModelDisplayLabel}</span>
                 <span className="composer-chip-effort">· {thinkingLevelLabel(thinkingLevel)}</span>
               </button>

@@ -166,6 +166,20 @@ describe("SessionModule", () => {
     await sessions.shutdown();
   });
 
+  it("persists access mode in one Session while new Sessions default to Auto Review", async () => {
+    const { sessions, openWorkspace, setSessionModelDefault } = setup();
+    const workspace = openWorkspace("access-mode");
+    const first = await sessions.create(workspace.id);
+    expect((await sessions.getConfiguration(workspace.id, first.sessionId)).configuration.accessMode).toBe("auto-review");
+    await sessions.updateConfiguration(workspace.id, first.sessionId, { accessMode: "full-access" });
+    await sessions.open(workspace.id, first.sessionId);
+    expect((await sessions.getConfiguration(workspace.id, first.sessionId)).configuration.accessMode).toBe("full-access");
+    const second = await sessions.create(workspace.id);
+    expect((await sessions.getConfiguration(workspace.id, second.sessionId)).configuration.accessMode).toBe("auto-review");
+    expect(setSessionModelDefault).not.toHaveBeenCalled();
+    await sessions.shutdown();
+  });
+
   it("rebuilds an idle selected Runtime after a Provider change notification", async () => {
     const { sessions, workers, openWorkspace, notifyProviderChange } = setup();
     const workspace = openWorkspace("provider-refresh");

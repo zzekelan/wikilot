@@ -39,6 +39,7 @@ import {
 } from "./context-clip-prompt.ts";
 import { createSessionEventMapper } from "./map-events.ts";
 import { createAgentTools } from "../../agent-tools/index.ts";
+import { createReviewSettingsStore, installAutomaticReview } from "../../automatic-review/index.ts";
 import { wikilotPromptOptions } from "./system-prompt.ts";
 import {
   decodeWorkerCommand,
@@ -200,6 +201,19 @@ async function handleStart(
     thinkingLevel: config.thinkingLevel,
   });
   session = created.session;
+  installAutomaticReview({
+    session,
+    runtime: modelRuntime,
+    settings: settingsManager,
+    readSettings: async () => {
+      await syncUserProviders(modelRuntime!, command.agentDir);
+      return createReviewSettingsStore(command.agentDir).read();
+    },
+    trustedReadTools: agentTools.customTools,
+    trustedReadExtensionPaths: agentTools.trustedReadExtensionPaths,
+    getAccessMode: () => currentConfig?.accessMode ?? "auto-review",
+    cwd: command.cwd,
+  });
   started = command;
   // Keep Wikilot's requested Session configuration distinct from Pi's
   // capability-clamped runtime state (for example, a non-reasoning model
@@ -333,6 +347,7 @@ async function handlePrompt(
     provider,
     model,
     thinkingLevel: config.thinkingLevel,
+    accessMode: config.accessMode ?? "auto-review",
   });
   try {
     const promptEntryId = session.sessionManager.appendCustomEntry(

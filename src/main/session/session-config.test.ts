@@ -42,6 +42,7 @@ describe("durable Session configuration snapshot (wikilot.session entry)", () =>
     );
 
     expect(readSessionConfig(sessionManager)).toEqual({
+      accessMode: "auto-review",
       provider: "openai",
       model: "gpt-4.1",
       thinkingLevel: "high",
@@ -57,6 +58,7 @@ describe("durable Session configuration snapshot (wikilot.session entry)", () =>
     );
 
     expect(readSessionConfig(sessionManager)).toEqual({
+      accessMode: "auto-review",
       provider: undefined,
       model: undefined,
       thinkingLevel: undefined,
@@ -78,6 +80,7 @@ describe("durable Session configuration snapshot (wikilot.session entry)", () =>
     );
 
     expect(readSessionConfig(sessionManager)).toEqual({
+      accessMode: "auto-review",
       provider: "anthropic",
       model: "claude-sonnet-4-5",
       thinkingLevel: "high",

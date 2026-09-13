@@ -602,6 +602,7 @@ describe("WikilotApplication (transport-neutral boundary)", () => {
     ).resolves.toEqual({
       status: "applied",
       configuration: {
+        accessMode: "auto-review",
         provider: "openai",
         model: "gpt-5.4",
         thinkingLevel: "high",
@@ -647,6 +648,7 @@ describe("WikilotApplication (transport-neutral boundary)", () => {
     ).resolves.toEqual({
       status: "applied",
       configuration: {
+        accessMode: "auto-review",
         provider: "anthropic",
         model: "claude-sonnet-4-5",
         thinkingLevel: "low",
@@ -674,6 +676,7 @@ describe("WikilotApplication (transport-neutral boundary)", () => {
     ).resolves.toEqual({
       status: "applied",
       configuration: {
+        accessMode: "auto-review",
         provider: "deepseek",
         model: "deepseek-v4-pro",
         thinkingLevel: "max",

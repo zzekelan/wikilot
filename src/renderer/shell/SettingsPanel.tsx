@@ -11,6 +11,7 @@ import { useFocusReturn, useFocusTrap } from "./overlay";
 import "./SettingsPanel.css";
 import { ProviderSettingsSection } from "./ProviderSettingsSection";
 import { useTheme } from "./theme";
+import { ReviewModelSetting } from "./ReviewModelSetting";
 
 type SettingsPanelProps = {
   open: boolean;
@@ -28,7 +29,7 @@ const SECTIONS: Array<{
   { id: "providers", label: "Providers" },
 ];
 
-/** Settings owns only application appearance, new-Session defaults, and Providers. */
+/** Application appearance, Automatic Review, new-Session defaults, and Providers. */
 export function SettingsPanel({
   open,
   onClose,
@@ -167,7 +168,7 @@ export function SettingsPanel({
             <section aria-label="General settings" className="settings-general-section">
               <div className="settings-general-inner">
                 <h3 className="settings-section-title">General</h3>
-                <p className="settings-hint">Appearance and defaults for new Sessions.</p>
+                <p className="settings-hint">Appearance, Automatic Review and defaults for new Sessions.</p>
                 <div className="settings-preference-row">
                   <div>
                     <span className="settings-preference-label" id="settings-theme-label">Theme</span>
@@ -221,6 +222,7 @@ export function SettingsPanel({
                     disabled={busy || defaultsLoading}
                   />
                 </div>
+                {open ? <ReviewModelSetting /> : null}
                 <p className="settings-save-hint" role="status">{busy ? "Saving…" : "Preferences save automatically."}</p>
               </div>
             </section>

@@ -343,6 +343,7 @@ export function beginWorkerTurn(input: {
   provider: string;
   model: string;
   thinkingLevel: string;
+  accessMode?: "auto-review" | "full-access";
 }): void {
   if (!enabled || !tracer) return;
   endAbandonedToolSpans();
@@ -359,6 +360,7 @@ export function beginWorkerTurn(input: {
   span.setAttribute("wikilot.llm.provider", input.provider);
   span.setAttribute("wikilot.llm.model", input.model);
   span.setAttribute("wikilot.llm.thinking", input.thinkingLevel);
+  span.setAttribute("wikilot.access.mode", input.accessMode ?? "auto-review");
   activeTurnSpan = span;
 }
 
@@ -372,6 +374,22 @@ export function endWorkerTurn(): void {
 }
 
 /** Begin one Tool lifecycle span under the active Worker Turn. */
+/** Review evidence stays out of telemetry; only lifecycle and decision are recorded. */
+export function beginAutomaticReview(toolName: string, toolCallId: string) {
+  const parent = activeTurnSpan ? trace.setSpan(context.active(), activeTurnSpan) : context.active();
+  const span = enabled ? tracer?.startSpan("session.automatic_review", undefined, parent) : undefined;
+  if (span) {
+    setAcceptanceRunId(span);
+    span.setAttribute("wikilot.tool.name", toolName);
+    span.setAttribute("wikilot.tool.call_id", toolCallId);
+  }
+  return (outcome: "allow" | "deny" | "error" | "cancelled") => {
+    span?.setAttribute("wikilot.review.outcome", outcome);
+    span?.end();
+    requestFlush();
+  };
+}
+
 export function beginToolExecution(input: {
   sessionId: string;
   toolName: string;

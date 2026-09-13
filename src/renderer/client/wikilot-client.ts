@@ -2,6 +2,7 @@ import type { StructuredPrompt } from "../../shared/session";
 import type {
   AppDefaults,
   AppDefaultsUpdate,
+  ReviewSettings,
   AuthenticationCancelRequest,
   AuthenticationRespondRequest,
   AuthenticationStartRequest,
@@ -152,6 +153,8 @@ export interface WikilotClient {
   /** App Defaults for new Sessions. */
   getAppDefaults(): Promise<AppDefaults>;
   updateAppDefaults(patch: AppDefaultsUpdate): Promise<AppDefaults>;
+  getReviewSettings(): Promise<ReviewSettings>;
+  updateReviewSettings(settings: ReviewSettings): Promise<ReviewSettings>;
   prompt(prompt: StructuredPrompt): Promise<void>;
   getProjectTrustRequest(
     workspaceId: string,

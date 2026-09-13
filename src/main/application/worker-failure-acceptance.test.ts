@@ -88,11 +88,19 @@ export default function (pi) {
         const chunks: Buffer[] = [];
         req.on("data", (chunk: Buffer) => chunks.push(chunk));
         req.on("end", () => {
-          requestCount += 1;
           const body = JSON.parse(Buffer.concat(chunks).toString("utf8")) as {
+            response_format?: unknown;
             tools?: Array<{ function?: { name?: string } }>;
             messages?: Array<{ role?: string; content?: unknown }>;
           };
+          if (body.response_format) {
+            res.writeHead(200, { "Content-Type": "text/event-stream" });
+            res.write(sseChunk({ role: "assistant", content: JSON.stringify({ outcome: "allow", reason: "Authorized isolated crash acceptance" }) }, null));
+            res.write(sseChunk({}, "stop"));
+            res.end("data: [DONE]\n\n");
+            return;
+          }
+          requestCount += 1;
           const completesNormally = body.messages?.some(
             (message) =>
               message.role === "user" &&
