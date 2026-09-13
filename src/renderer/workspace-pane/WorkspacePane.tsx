@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ComponentProps, ReactNode } from "react";
-import { ArrowLeft, ArrowRight, File, FileText, FileWarning, Info, Maximize2, Minimize2, Network, Paperclip, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, File, FileText, FileWarning, Maximize2, Minimize2, Network, Paperclip, X } from "lucide-react";
 import type { ContextClip, MarkdownContextClip } from "../../shared/session";
 import type {
   MarkdownDocumentSnapshot,
@@ -18,6 +18,7 @@ import {
   forwardWorkspacePaneHistory,
   paneCanGoBack,
   paneCanGoForward,
+  openWorkspaceGraphTab,
   openWorkspacePaneTab,
   reorderWorkspacePaneTabs,
   setWorkspacePaneEditorSelection,
@@ -30,6 +31,7 @@ import {
   workspaceHeadingSlug,
 } from "../../shared/workspace";
 import { client } from "../client";
+import { recordUiGesture } from "../telemetry";
 import { MarkdownText } from "../markdown";
 import { pdfFailurePresentation } from "../pdf/pdf-errors";
 import { pushEscapeLayer } from "../escape-stack";
@@ -83,31 +85,6 @@ function isMarkdownContextClip(clip: ContextClip): clip is MarkdownContextClip {
 function fileName(path: string): string {
   if (path === WORKSPACE_GRAPH_TAB_ID) return "Graph";
   return path.split("/").filter(Boolean).at(-1) ?? path;
-}
-
-function WorkspaceFileInfo({ path }: { path: string }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  const trigger = useRef<HTMLButtonElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const removeEscape = pushEscapeLayer(() => {
-      setOpen(false);
-      trigger.current?.focus();
-    });
-    const onPointerDown = (event: PointerEvent) => {
-      if (!ref.current?.contains(event.target as Node)) setOpen(false);
-    };
-    document.addEventListener("pointerdown", onPointerDown);
-    return () => {
-      removeEscape();
-      document.removeEventListener("pointerdown", onPointerDown);
-    };
-  }, [open]);
-  return <div className="workspace-file-info" ref={ref}>
-    <button ref={trigger} type="button" className="icon-btn" aria-label="File information" title="File information" aria-expanded={open} onClick={() => setOpen(!open)}><Info size={16} /></button>
-    {open ? <div className="workspace-file-info-popover" role="region" aria-label="File information"><span>Workspace path</span><code>{path}</code></div> : null}
-  </div>;
 }
 
 function lockedStateCopy(snapshot: MarkdownDocumentSnapshot) {
@@ -726,7 +703,10 @@ export function WorkspacePane({
         })}
       </div></div>
       <div className="workspace-pane-actions">
-        {activePath && !graphActive ? <WorkspaceFileInfo key={activePath} path={activePath} /> : null}
+        <button type="button" className={graphActive ? "icon-btn workspace-pane-action-active" : "icon-btn"} aria-label="Graph" title="Open Graph" aria-pressed={graphActive} onClick={() => {
+          recordUiGesture("graph.open", { "wikilot.gesture": "graph.open" });
+          onTabsChange(openWorkspaceGraphTab(tabs));
+        }}><Network size={16} /></button>
         {!compact ? <button type="button" className={readingMode === "wide" ? "icon-btn workspace-pane-action-active" : "icon-btn"} disabled={!activePath} aria-label={readingMode === "wide" ? "Exit Wide Mode" : "Wide Mode"} aria-pressed={readingMode === "wide"} title={readingMode === "wide" ? "Exit Wide Mode (⌘E)" : "Wide Mode (⌘E)"} onClick={() => onWideModeChange?.(readingMode === "wide" ? "normal" : "wide")}>{readingMode === "wide" ? <Minimize2 size={17} /> : <Maximize2 size={17} />}</button> : null}
         {headerActions}
       </div>
