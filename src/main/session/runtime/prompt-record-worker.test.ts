@@ -10,7 +10,7 @@ afterEach(async () => Promise.all(roots.splice(0).map((root) => rm(root, { recur
 
 function chunk(delta: unknown, finishReason: string | null): string {
   return `data: ${JSON.stringify({
-    id: "chatcmpl-sidecar",
+    id: "chatcmpl-prompt",
     object: "chat.completion.chunk",
     created: 1,
     model: "fast-model",
@@ -18,9 +18,9 @@ function chunk(delta: unknown, finishReason: string | null): string {
   })}\n\n`;
 }
 
-describe("Context Clip sidecar persistence in a real Session Worker", () => {
+describe("Prompt record persistence in a real Session Worker", () => {
   it("persists the user message after an asynchronous message_end Extension hook", async () => {
-    const root = await mkdtemp(join(tmpdir(), "wikilot-sidecar-worker-"));
+    const root = await mkdtemp(join(tmpdir(), "wikilot-prompt-worker-"));
     roots.push(root);
     const cwd = join(root, "workspace");
     const sessionDir = join(root, "sessions");
@@ -52,7 +52,7 @@ describe("Context Clip sidecar persistence in a real Session Worker", () => {
 
     const provider = "fast-provider";
     const model = "fast-model";
-    const sessionId = "sidecar-worker-session";
+    const sessionId = "prompt-worker-session";
     const sessionFile = join(sessionDir, `${sessionId}.jsonl`);
     await writeFile(sessionFile, `${JSON.stringify({ type: "session", version: 3, id: sessionId, timestamp: new Date().toISOString(), cwd })}\n`);
     await writeFile(join(agentDir, "models.json"), JSON.stringify({ providers: {
@@ -79,7 +79,7 @@ describe("Context Clip sidecar persistence in a real Session Worker", () => {
     }
 
     const entries = (await readFile(sessionFile, "utf8")).trim().split("\n").map((line) => JSON.parse(line));
-    const sidecar = entries.find((entry) => entry.type === "custom" && entry.customType === "wikilot.context-clips");
-    expect(entries.some((entry) => entry.parentId === sidecar?.id && entry.type === "message" && entry.message?.role === "user")).toBe(true);
+    const promptRecord = entries.find((entry) => entry.type === "custom" && entry.customType === "wikilot.prompt");
+    expect(entries.some((entry) => entry.parentId === promptRecord?.id && entry.type === "message" && entry.message?.role === "user")).toBe(true);
   }, 30_000);
 });

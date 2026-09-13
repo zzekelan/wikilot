@@ -689,7 +689,7 @@ describe("Session execution (per-Session Runtime)", () => {
       undefined,
     );
     // Status stream: starting → idle → running. The real Worker emits the
-    // clean user projection only after its Context Clip sidecar is durable.
+    // clean user projection only after its Prompt record is durable.
     expect(events).toEqual([
       { type: "session_status", status: "starting" },
       { type: "session_status", status: "idle" },

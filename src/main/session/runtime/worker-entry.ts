@@ -18,8 +18,8 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import type { SessionContextState } from "../../../shared/timeline";
 import {
-  CONTEXT_CLIP_ENTRY_TYPE,
-  contextClipSidecar,
+  PROMPT_ENTRY_TYPE,
+  createPromptRecord,
 } from "../../../shared/session/prompt.ts";
 import {
   createWikilotModelRuntime,
@@ -33,7 +33,7 @@ import {
   initHostTelemetry,
   shutdownHostTelemetry,
 } from "../../telemetry/index.ts";
-import { waitForPersistedUserMessage } from "./context-clip-persistence.ts";
+import { waitForPersistedUserMessage } from "./prompt-persistence.ts";
 import {
   serializePromptForModel,
 } from "./context-clip-prompt.ts";
@@ -335,13 +335,13 @@ async function handlePrompt(
     thinkingLevel: config.thinkingLevel,
   });
   try {
-    const sidecarId = session.sessionManager.appendCustomEntry(
-      CONTEXT_CLIP_ENTRY_TYPE,
-      contextClipSidecar(command.prompt),
+    const promptEntryId = session.sessionManager.appendCustomEntry(
+      PROMPT_ENTRY_TYPE,
+      createPromptRecord(command.prompt),
     );
     const turn = session.prompt(serializePromptForModel(command.prompt));
     await waitForPersistedUserMessage(
-      () => Boolean(session?.sessionManager.getChildren(sidecarId).find(
+      () => Boolean(session?.sessionManager.getChildren(promptEntryId).find(
         (entry) => entry.type === "message" && entry.message.role === "user",
       )),
       turn,

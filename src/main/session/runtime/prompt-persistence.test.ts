@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { waitForPersistedUserMessage } from "./context-clip-persistence";
+import { waitForPersistedUserMessage } from "./prompt-persistence";
 
-describe("Context Clip sidecar persistence wait", () => {
+describe("Prompt record persistence wait", () => {
   afterEach(() => {
     vi.useRealTimers();
   });
@@ -46,7 +46,7 @@ describe("Context Clip sidecar persistence wait", () => {
     vi.useFakeTimers();
     const waiting = waitForPersistedUserMessage(() => false, Promise.resolve());
     const assertion = expect(waiting).rejects.toThrow(
-      "Prompt user message was not durably paired with its Context Clip sidecar",
+      "Prompt user message was not durably paired with its Prompt record",
     );
 
     await vi.advanceTimersByTimeAsync(5_005);

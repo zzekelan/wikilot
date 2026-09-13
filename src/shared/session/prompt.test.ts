@@ -1,15 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
-  CONTEXT_CLIP_ENTRY_TYPE,
+  PROMPT_ENTRY_TYPE,
   normalizeStructuredPrompt,
-  contextClipSidecar,
-  readContextClipSidecar,
+  createPromptRecord,
+  readPromptRecord,
   type StructuredPrompt,
 } from "./prompt";
 
-it("validates and preserves Prompt command identity in its display sidecar", () => {
+it("validates and preserves Prompt command identity in its Prompt record", () => {
   const prompt = normalizeStructuredPrompt({ workspaceId: "workspace", sessionId: "session", text: "/init", command: "init", clips: [] });
-  expect(readContextClipSidecar(contextClipSidecar(prompt))).toEqual({ version: 1, text: "/init", command: "init", clips: [] });
+  expect(readPromptRecord(createPromptRecord(prompt))).toEqual({ version: 1, text: "/init", command: "init", clips: [] });
   expect(() => normalizeStructuredPrompt({ ...prompt, command: "unknown" })).toThrow("Invalid Prompt command");
   expect(() => normalizeStructuredPrompt({ ...prompt, text: "unrelated text" })).toThrow("Invalid Prompt command");
 });
@@ -45,7 +45,7 @@ describe("structured Prompt contract", () => {
       ...prompt,
       text: "Compare these",
     });
-    expect(CONTEXT_CLIP_ENTRY_TYPE).toBe("wikilot.context-clips");
+    expect(PROMPT_ENTRY_TYPE).toBe("wikilot.prompt");
   });
 
   it("normalizes a multi-page PDF Clip with page anchors and coordinate boxes", () => {

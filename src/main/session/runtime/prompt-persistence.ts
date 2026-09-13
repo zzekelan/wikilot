@@ -12,7 +12,7 @@ function delay(ms: number): Promise<TurnOutcome> {
   });
 }
 
-/** Wait until Pi exposes the user message directly below its Context Clip sidecar. */
+/** Wait until Pi exposes the user message directly below its Prompt record. */
 export async function waitForPersistedUserMessage(
   isPersisted: () => boolean,
   turn: Promise<void>,
@@ -37,5 +37,5 @@ export async function waitForPersistedUserMessage(
     await delay(POLL_INTERVAL_MS);
   }
   if (isPersisted()) return;
-  throw new Error("Prompt user message was not durably paired with its Context Clip sidecar");
+  throw new Error("Prompt user message was not durably paired with its Prompt record");
 }

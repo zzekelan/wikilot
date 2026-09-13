@@ -310,16 +310,16 @@ export default function (pi) {
           .trim()
           .split("\n")
           .map((line) => JSON.parse(line) as Record<string, unknown>);
-        const sidecarIndex = history.findIndex(
-          (entry) => entry.type === "custom" && entry.customType === "wikilot.context-clips",
+        const promptEntryIndex = history.findIndex(
+          (entry) => entry.type === "custom" && entry.customType === "wikilot.prompt",
         );
-        expect(sidecarIndex).toBeGreaterThan(0);
-        expect(history[sidecarIndex]).toMatchObject({
+        expect(promptEntryIndex).toBeGreaterThan(0);
+        expect(history[promptEntryIndex]).toMatchObject({
           data: { version: 1, text: "", clips: [contextClip] },
         });
-        expect(history[sidecarIndex + 1]).toMatchObject({
+        expect(history[promptEntryIndex + 1]).toMatchObject({
           type: "message",
-          parentId: history[sidecarIndex]?.id,
+          parentId: history[promptEntryIndex]?.id,
           message: { role: "user" },
         });
         await vi.waitFor(async () => {

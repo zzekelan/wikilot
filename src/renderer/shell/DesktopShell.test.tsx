@@ -879,7 +879,7 @@ describe("DesktopShell Workspace Pane sizing", () => {
       content: "# Evidence\n\nSelect this passage today.",
     });
     fake.client.prompt
-      .mockRejectedValueOnce(new Error("sidecar write failed"))
+      .mockRejectedValueOnce(new Error("Prompt record write failed"))
       .mockResolvedValue(undefined);
 
     renderShell();
@@ -921,7 +921,7 @@ describe("DesktopShell Workspace Pane sizing", () => {
         locator: expect.objectContaining({ kind: "markdown", mode: "reading" }),
       })],
     }));
-    expect(await screen.findByText("sidecar write failed")).toBeTruthy();
+    expect(await screen.findByText("Prompt record write failed")).toBeTruthy();
     expect(screen.getByRole("button", { name: "1 clip" })).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Send" }));

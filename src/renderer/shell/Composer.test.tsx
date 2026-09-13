@@ -313,7 +313,7 @@ describe("Composer Prompt save gate", () => {
       },
     };
     const onClipsChange = vi.fn();
-    fake.client.prompt.mockRejectedValueOnce(new Error("sidecar write failed"));
+    fake.client.prompt.mockRejectedValueOnce(new Error("Prompt record write failed"));
     render(
       <Composer
         enabled
@@ -336,7 +336,7 @@ describe("Composer Prompt save gate", () => {
       text: "",
       clips: [clip],
     }));
-    expect(await screen.findByText(/sidecar write failed/i)).toBeTruthy();
+    expect(await screen.findByText(/Prompt record write failed/i)).toBeTruthy();
     expect(screen.getByTestId("composer-clips")).toBeTruthy();
     expect(onClipsChange).not.toHaveBeenCalled();
   });

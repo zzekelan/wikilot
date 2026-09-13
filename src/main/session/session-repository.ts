@@ -6,9 +6,9 @@ import {
   type SessionInfo,
 } from "@earendil-works/pi-coding-agent";
 import {
-  CONTEXT_CLIP_ENTRY_TYPE,
-  readContextClipSidecar,
-  type ContextClipSidecar,
+  PROMPT_ENTRY_TYPE,
+  readPromptRecord,
+  type PromptRecord,
 } from "../../shared/session";
 import {
   reduceTimelineDelta,
@@ -115,20 +115,20 @@ function messageTimestamp(message: { timestamp?: unknown }): number {
     : 0;
 }
 
-function promptSidecars(branch: ReturnType<SessionManager["getBranch"]>) {
-  const clipSidecars = new Map<string, ContextClipSidecar>();
+function promptRecordsByUserMessage(branch: ReturnType<SessionManager["getBranch"]>) {
+  const recordsById = new Map<string, PromptRecord>();
   for (const entry of branch) {
-    if (entry.type !== "custom" || entry.customType !== CONTEXT_CLIP_ENTRY_TYPE) continue;
-    const sidecar = readContextClipSidecar(entry.data);
-    if (sidecar) clipSidecars.set(entry.id, sidecar);
+    if (entry.type !== "custom" || entry.customType !== PROMPT_ENTRY_TYPE) continue;
+    const promptRecord = readPromptRecord(entry.data);
+    if (promptRecord) recordsById.set(entry.id, promptRecord);
   }
-  const sidecarsByUserMessage = new WeakMap<object, ContextClipSidecar>();
+  const recordsByUserMessage = new WeakMap<object, PromptRecord>();
   for (const entry of branch) {
     if (entry.type !== "message" || entry.message.role !== "user" || !entry.parentId) continue;
-    const sidecar = clipSidecars.get(entry.parentId);
-    if (sidecar) sidecarsByUserMessage.set(entry.message, sidecar);
+    const promptRecord = recordsById.get(entry.parentId);
+    if (promptRecord) recordsByUserMessage.set(entry.message, promptRecord);
   }
-  return sidecarsByUserMessage;
+  return recordsByUserMessage;
 }
 
 /** Rebuild persisted history through the same Delta projector used live. */
@@ -137,7 +137,7 @@ export function readSessionTimelineItems(
 ): TimelineItem[] {
   const branch = sessionManager.getBranch();
   const context = buildSessionContext(branch);
-  const sidecarsByUserMessage = promptSidecars(branch);
+  const recordsByUserMessage = promptRecordsByUserMessage(branch);
   let items: TimelineItem[] = [];
 
   function apply(delta: TimelineDelta, at: number): void {
@@ -148,14 +148,14 @@ export function readSessionTimelineItems(
     const message = context.messages[messageIndex]!;
     const at = messageTimestamp(message);
     if (message.role === "user") {
-      const sidecar = sidecarsByUserMessage.get(message);
-      const text = sidecar?.text ?? messageText(message.content).trim();
-      if (text || sidecar?.clips.length) {
+      const promptRecord = recordsByUserMessage.get(message);
+      const text = promptRecord?.text ?? messageText(message.content).trim();
+      if (text || promptRecord?.clips.length) {
         apply({
           type: "user_message",
           text,
-          ...(sidecar?.command ? { command: sidecar.command } : {}),
-          ...(sidecar?.clips.length ? { clips: sidecar.clips } : {}),
+          ...(promptRecord?.command ? { command: promptRecord.command } : {}),
+          ...(promptRecord?.clips.length ? { clips: promptRecord.clips } : {}),
         }, at);
       }
       continue;
@@ -244,9 +244,9 @@ export function readSessionTimelineItems(
 function toListItem(info: SessionInfo, manager: SessionManager): PersistentSessionListItem {
   const branch = manager.getBranch();
   const firstUser = branch.find((entry) => entry.type === "message" && entry.message.role === "user");
-  const sidecar = firstUser?.type === "message" ? promptSidecars(branch).get(firstUser.message) : undefined;
-  const promptText = sidecar?.text ?? (firstUser?.type === "message" && firstUser.message.role === "user" ? messageText(firstUser.message.content) : "");
-  const clipNames = [...new Set(sidecar?.clips.map((clip) => clip.source.path.split("/").at(-1)) ?? [])];
+  const promptRecord = firstUser?.type === "message" ? promptRecordsByUserMessage(branch).get(firstUser.message) : undefined;
+  const promptText = promptRecord?.text ?? (firstUser?.type === "message" && firstUser.message.role === "user" ? messageText(firstUser.message.content) : "");
+  const clipNames = [...new Set(promptRecord?.clips.map((clip) => clip.source.path.split("/").at(-1)) ?? [])];
   const title = promptText.trim() || (clipNames.length ? `About ${clipNames.slice(0, 2).join(", ")}${clipNames.length > 2 ? "…" : ""}` : "");
   const characters = Array.from(title.replace(/\s+/gu, " "));
   return {

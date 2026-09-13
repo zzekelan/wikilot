@@ -1,7 +1,7 @@
 import { PROMPT_COMMANDS, type PromptCommandId } from "./prompt-commands.ts";
 
-export const CONTEXT_CLIP_ENTRY_TYPE = "wikilot.context-clips";
-export const CONTEXT_CLIP_ENTRY_VERSION = 1;
+export const PROMPT_ENTRY_TYPE = "wikilot.prompt";
+export const PROMPT_ENTRY_VERSION = 1;
 export const MAX_CONTEXT_CLIPS = 20;
 export const MAX_CONTEXT_CLIP_CHARACTERS = 50_000;
 export const MAX_CONTEXT_CLIP_TOTAL_CHARACTERS = 100_000;
@@ -104,8 +104,13 @@ export type StructuredPrompt = {
   clips: ContextClip[];
 };
 
-export type ContextClipSidecar = {
-  version: typeof CONTEXT_CLIP_ENTRY_VERSION;
+/**
+ * The submitted Prompt preserved in Session history before model serialization
+ * or command expansion. Text is the normalized user input; Clips remain quoted
+ * source snapshots. Workspace and Session identity belong to the containing history.
+ */
+export type PromptRecord = {
+  version: typeof PROMPT_ENTRY_VERSION;
   text: string;
   command?: PromptCommandId;
   clips: ContextClip[];
@@ -326,22 +331,23 @@ export function normalizeStructuredPrompt(value: unknown): StructuredPrompt {
   return { workspaceId, sessionId, text, clips, ...(command !== undefined ? { command } : {}) };
 }
 
-export function contextClipSidecar(prompt: StructuredPrompt): ContextClipSidecar {
-  return { version: CONTEXT_CLIP_ENTRY_VERSION, text: prompt.text, clips: prompt.clips, ...(prompt.command ? { command: prompt.command } : {}) };
+/** Preserve the whole submission, including Prompts without Context Clips. */
+export function createPromptRecord(prompt: StructuredPrompt): PromptRecord {
+  return { version: PROMPT_ENTRY_VERSION, text: prompt.text, clips: prompt.clips, ...(prompt.command ? { command: prompt.command } : {}) };
 }
 
-export function readContextClipSidecar(value: unknown): ContextClipSidecar | undefined {
+export function readPromptRecord(value: unknown): PromptRecord | undefined {
   const input = record(value);
-  if (input?.version !== CONTEXT_CLIP_ENTRY_VERSION || typeof input.text !== "string") return undefined;
+  if (input?.version !== PROMPT_ENTRY_VERSION || typeof input.text !== "string") return undefined;
   try {
     const normalized = normalizeStructuredPrompt({
-      workspaceId: "sidecar",
-      sessionId: "sidecar",
+      workspaceId: "prompt-record",
+      sessionId: "prompt-record",
       text: input.text,
       command: input.command,
       clips: input.clips,
     });
-    return contextClipSidecar(normalized);
+    return createPromptRecord(normalized);
   } catch {
     return undefined;
   }

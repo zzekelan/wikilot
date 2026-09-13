@@ -36,7 +36,7 @@ describe("Session repository (create / list / open / delete)", () => {
       text: "source excerpt", fingerprint: "sha256:test",
       locator: { kind: "markdown", mode: "reading", start: 0, end: 14, exact: "source excerpt", prefix: "", suffix: "" },
     };
-    session.sessionManager.appendCustomEntry("wikilot.context-clips", { version: 1, text, clips: withClip ? [clip] : [] });
+    session.sessionManager.appendCustomEntry("wikilot.prompt", { version: 1, text, clips: withClip ? [clip] : [] });
     session.sessionManager.appendMessage({ role: "user", content: "<request>model-only payload</request>", timestamp: 1000 });
     const [listed] = await store.list(workspaceId);
     expect(listed?.firstMessage).toBe(expected);
@@ -546,7 +546,7 @@ describe("Session repository (create / list / open / delete)", () => {
     ]);
   });
 
-  it("restores Clips only from a direct-child sidecar on the current branch", () => {
+  it("restores Clips only from a Prompt record directly parenting the user message on the current branch", () => {
     const cwd = tempWorkspace("clip-history");
     const sessionDir = join(tempRoot(), "sessions");
     const sessionId = "77777777-7777-7777-7777-777777777777";
@@ -578,24 +578,24 @@ describe("Session repository (create / list / open / delete)", () => {
         ],
       },
     };
-    const sidecar = (id: string, parentId: string | null, text: string, clips: ContextClip[] = [clip]) => ({
+    const promptRecord = (id: string, parentId: string | null, text: string, clips: ContextClip[] = [clip]) => ({
       type: "custom",
       id,
       parentId,
       timestamp: "2026-01-01T00:00:01.000Z",
-      customType: "wikilot.context-clips",
+      customType: "wikilot.prompt",
       data: { version: 1, text, clips },
     });
     const lines = [
       { type: "session", version: 3, id: sessionId, timestamp: "2026-01-01T00:00:00.000Z", cwd },
-      sidecar("off-sidecar", null, "off branch"),
-      { type: "message", id: "off-user", parentId: "off-sidecar", timestamp: "2026-01-01T00:00:02.000Z", message: { role: "user", content: "serialized off branch", timestamp: 2000 } },
-      sidecar("orphan", null, "orphan"),
+      promptRecord("off-prompt", null, "off branch"),
+      { type: "message", id: "off-user", parentId: "off-prompt", timestamp: "2026-01-01T00:00:02.000Z", message: { role: "user", content: "serialized off branch", timestamp: 2000 } },
+      promptRecord("orphan", null, "orphan"),
       { type: "custom", id: "intervening", parentId: "orphan", timestamp: "2026-01-01T00:00:03.000Z", customType: "other", data: {} },
       { type: "message", id: "orphan-user", parentId: "intervening", timestamp: "2026-01-01T00:00:04.000Z", message: { role: "user", content: "ordinary current message", timestamp: 4000 } },
-      sidecar("paired", "orphan-user", "clean instruction", [clip, pdfClip]),
+      promptRecord("paired", "orphan-user", "clean instruction", [clip, pdfClip]),
       { type: "message", id: "paired-user", parentId: "paired", timestamp: "2026-01-01T00:00:05.000Z", message: { role: "user", content: "model serialization must stay hidden", timestamp: 5000 } },
-      { ...sidecar("init", "paired-user", "/init", []), data: { version: 1, text: "/init", command: "init", clips: [] } },
+      { ...promptRecord("init", "paired-user", "/init", []), data: { version: 1, text: "/init", command: "init", clips: [] } },
       { type: "message", id: "init-user", parentId: "init", timestamp: "2026-01-01T00:00:06.000Z", message: { role: "user", content: "expanded initialization instructions", timestamp: 6000 } },
     ];
     writeFileSync(file, `${lines.map((line) => JSON.stringify(line)).join("\n")}\n`);
