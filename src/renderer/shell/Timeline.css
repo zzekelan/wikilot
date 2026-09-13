@@ -397,11 +397,36 @@
   transform: rotate(-90deg);
 }
 
-/* ---- Live indicators: restrained — state reads through the accent label
-   and the blinking caret, not through motion or iconography. ---- */
+/* ---- Live indicators ---- */
 
 .activity-label-live {
   color: var(--color-highlight);
+}
+
+.activity-tool-name.activity-label-live {
+  background: linear-gradient(
+    110deg,
+    var(--color-highlight) 35%,
+    color-mix(in srgb, var(--color-highlight) 40%, white) 50%,
+    var(--color-highlight) 65%
+  );
+  background-size: 250% 100%;
+  background-clip: text;
+  color: transparent;
+  animation: tool-name-shimmer 2s linear infinite;
+}
+
+@keyframes tool-name-shimmer {
+  from { background-position: 100% 0; }
+  to { background-position: -100% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .activity-tool-name.activity-label-live {
+    animation: none;
+    background: none;
+    color: var(--color-highlight);
+  }
 }
 
 /* Streaming text caret: appended after the final text node while deltas
