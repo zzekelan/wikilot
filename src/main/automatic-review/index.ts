@@ -2,6 +2,7 @@ import type { AgentSession, ModelRuntime, SettingsManager, ToolDefinition } from
 import type { ReviewSettings } from "../../shared/settings/index.ts";
 import type { AccessMode } from "../../shared/workspace/types.ts";
 import { beginAutomaticReview } from "../telemetry/index.ts";
+import { isSafeBashCommand } from "./safe-bash.ts";
 import { reviewConversation } from "./context.ts";
 import { constrainReviewOutput, parseReviewDecision } from "./structured-output.ts";
 
@@ -57,6 +58,15 @@ export function installAutomaticReview(options: {
         (definition && options.trustedReadTools.includes(definition)) ||
         options.trustedReadExtensionPaths.includes(tool.sourceInfo.path))) return undefined;
 
+    const prefix = options.settings.getShellCommandPrefix();
+    const command = tool?.name === "bash" && tool.sourceInfo.source === "builtin"
+      ? (call.args as { command: string }).command : undefined;
+    if (command !== undefined && process.platform !== "win32" && !prefix &&
+        !options.settings.getShellPath() && !process.env.BASH_ENV && isSafeBashCommand(command)) {
+      freezeArguments(call.args);
+      return undefined;
+    }
+
     const finish = beginAutomaticReview(call.toolCall.name, call.toolCall.id);
     const reviewSignal = AbortSignal.any([
       ...(signal ? [signal] : []), AbortSignal.timeout(REVIEW_TIMEOUT_MS),
@@ -71,9 +81,6 @@ export function installAutomaticReview(options: {
       const model = selected ? runtime.getModel(selected.provider, selected.model) : session.model;
       if (!model) throw new Error("Review Model is unavailable. Select an available model in Settings.");
       constrainReviewOutput(model.api, {}); // Fail before requesting an unsupported protocol.
-      const prefix = options.settings.getShellCommandPrefix();
-      const command = tool.name === "bash" && tool.sourceInfo.source === "builtin"
-        ? (call.args as { command: string }).command : undefined;
       const input = JSON.stringify({
         conversation: reviewConversation(session.sessionManager.getBranch()),
         action: { tool, arguments: call.args, cwd: options.cwd,

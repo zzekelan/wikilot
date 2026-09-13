@@ -57,7 +57,7 @@ async function setup(customTools: ToolDefinition[] = [], withWeb = false) {
     installAutomaticReview({ session, runtime: { getModel, completeSimple: complete }, settings,
       readSettings: store.read, cwd: root, trustedReadTools: [], trustedReadExtensionPaths: [webExtensionPath], getAccessMode: () => mode });
   }
-  return { root, session, manager, model, assistant, complete, getModel, prompt, call, store, install,
+  return { root, session, manager, model, assistant, complete, getModel, prompt, call, store, install, settings,
     setMode(value: AccessMode) { mode = value; } };
 }
 
@@ -255,4 +255,78 @@ it("skips bundled web tools by source but reviews an SDK tool with the same name
   custom.install(); custom.prompt("search the web");
   await custom.call("web_search", {});
   expect(custom.complete).toHaveBeenCalledTimes(1);
+});
+
+
+it("bypasses review for literal read-only Bash commands, including safe chains", async () => {
+  const test = await setup(); test.settings.setShellCommandPrefix(undefined); test.install();
+  writeFileSync(join(test.root, "review.json"), "invalid review settings must not be consulted");
+  for (const command of [
+    "pwd", "ls -lah src", "/bin/ls -l", "/usr/bin/wc -l file", "cat 'a b.md'", 'cat "a b.md"',
+    "head -n 20 file", "tail -n10 file", "wc --lines file", "grep -n -e pattern file",
+    "rg --files --hidden", "rg -n -g '*.ts' 'foo|bar' src", "rg --max-count=2 --regexp=foo src",
+    "cat note.md | head -n 10", "pwd && ls -la; wc -l note.md", "grep foo file || cat file",
+    "cat -- '-file'", "rg -e --pre=literal-pattern src",
+  ]) {
+    const args = { command };
+    expect(await test.call("bash", args), command).toBeUndefined();
+    expect(Object.isFrozen(args), command).toBe(true);
+  }
+  expect(test.complete).not.toHaveBeenCalled();
+});
+
+it("retains model review for mutations, ambiguous shell syntax and executable options", async () => {
+  const test = await setup(); test.settings.setShellCommandPrefix(undefined); test.install(); test.prompt("Inspect the workspace");
+  for (const command of [
+    "rm -rf data", "touch file", "git status", "git diff", "find . -delete", "sed -i s/a/b/ file",
+    "rg --pre=sh foo .", "rg --pre sh foo .", "rg --search-zip foo .", "sort --compress-program=sh file",
+    "cat file > output", "cat file 2>&1", "cat < file", "cat file | tee output", "pwd && rm file",
+    "pwd; rm file", "cat file | bash", "cat $(touch output)", "cat `touch output`", "cat <(touch output)",
+    "cat $FILE", "cat *.md", "cat [ab].md", "cat {a,b}.md", "cat ~/file", "cat file # comment",
+    "cat file\nrm output", "cat\u00a0file", "cat 'unterminated", 'cat "unterminated', "cat foo\\ bar",
+    "ls &", "ls &&", "ls ;; pwd", "(ls)", "PATH=/tmp ls", "env ls", "bash -c ls",
+    "/tmp/ls", "./cat file", "ls --unknown-option", "rg --max-count=no foo file", "head -n",
+    "cat;", "", "toString", "pwd && { ls; }",
+  ]) {
+    test.complete.mockClear();
+    expect(await test.call("bash", { command }), command).toBeUndefined();
+    expect(test.complete, command).toHaveBeenCalledTimes(1);
+  }
+});
+
+it("keeps reviewing custom Bash tools, prefixes and shells, and extension-rewritten actions", async () => {
+  const test = await setup(); test.install(); test.prompt("Inspect the workspace");
+  await test.call("bash", { command: "ls" });
+  expect(test.complete).toHaveBeenCalledTimes(1);
+  test.settings.setShellCommandPrefix(undefined);
+  test.settings.setShellPath("/custom/bash");
+  await test.call("bash", { command: "ls" });
+  expect(test.complete).toHaveBeenCalledTimes(2);
+  const custom = await setup([{ name: "bash", label: "Bash", description: "Custom tool",
+    parameters: Type.Object({ command: Type.String() }), execute: async () => ({ content: [], details: {} }) }]);
+  custom.settings.setShellCommandPrefix(undefined); custom.install(); custom.prompt("Inspect the workspace");
+  await custom.call("bash", { command: "ls" });
+  expect(custom.complete).toHaveBeenCalledTimes(1);
+  const rewritten = await setup(); rewritten.settings.setShellCommandPrefix(undefined);
+  rewritten.session.agent.beforeToolCall = async (call) => {
+    (call.args as { command: string }).command = "touch file";
+    return undefined;
+  };
+  rewritten.install(); rewritten.prompt("Inspect the workspace");
+  await rewritten.call("bash", { command: "ls" });
+  expect(rewritten.complete).toHaveBeenCalledTimes(1);
+  expect(JSON.parse(rewritten.complete.mock.calls[0][1].messages[0].content as string).action.arguments.command).toBe("touch file");
+});
+
+it("does not bypass review when startup scripts or ripgrep config could add execution", async () => {
+  const test = await setup(); test.settings.setShellCommandPrefix(undefined); test.install(); test.prompt("Inspect the workspace");
+  try {
+    vi.stubEnv("BASH_ENV", "/tmp/startup.sh");
+    await test.call("bash", { command: "ls" });
+    expect(test.complete).toHaveBeenCalledTimes(1);
+    vi.stubEnv("BASH_ENV", "");
+    vi.stubEnv("RIPGREP_CONFIG_PATH", "/tmp/rg-config");
+    await test.call("bash", { command: "rg pattern file" });
+    expect(test.complete).toHaveBeenCalledTimes(2);
+  } finally { vi.unstubAllEnvs(); }
 });
