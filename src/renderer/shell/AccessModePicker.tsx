@@ -52,7 +52,7 @@ export function AccessModePicker({ mode, disabled, onChange }: {
       data-testid="composer-access-mode" aria-label={`Access mode: ${selected.label}`}
       aria-haspopup="menu" aria-expanded={open} aria-controls={open ? id : undefined}
       disabled={disabled || saving} onClick={() => { setOpen(!open); setError(null); }}>
-      <selected.Icon size={13} aria-hidden="true" />
+      <selected.Icon size={16} aria-hidden="true" />
       <span>{selected.label}</span>
     </button>
     {open && !disabled ? <div id={id} ref={menu} className="composer-picker composer-access-menu"

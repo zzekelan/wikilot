@@ -159,7 +159,6 @@
   color: var(--color-subtle);
   padding: var(--space-05) var(--space-2);
   font: inherit;
-  font-size: var(--text-xs);
   cursor: pointer;
   transition:
     color 0.15s ease-out,
