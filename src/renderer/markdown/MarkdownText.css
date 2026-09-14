@@ -13,17 +13,16 @@
 .md-h4,
 .md-h5,
 .md-h6 {
+  font-family: var(--font-heading);
   color: var(--color-ink);
   font-weight: 600;
   letter-spacing: -0.01em;
 }
 
-/* The reading voice: top-level headings and quotes set in Source Serif 4 —
-   the wiki's editorial identity against the UI's Inter chrome. */
+/* Heading typography is shared with the shell; quoted prose keeps its own font. */
 .md-h1,
 .md-h2,
 .md-h3 {
-  font-family: var(--font-serif);
   letter-spacing: 0;
 }
 

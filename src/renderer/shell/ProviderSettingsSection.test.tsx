@@ -1,6 +1,7 @@
 /** @vitest-environment jsdom */
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { ComponentProps } from "react";
 import type { ProviderSummary } from "../../shared/settings";
 import { ProviderSettingsSection } from "./ProviderSettingsSection";
 
@@ -74,6 +75,7 @@ const unsupportedApiKeyBuiltin = userProvider({
 function renderSection(
   providers: ProviderSummary[],
   credentials: Array<{ providerId: string; type: "api_key" | "oauth" }> = [],
+  callbacks: Partial<Pick<ComponentProps<typeof ProviderSettingsSection>, "onError" | "onChanged">> = {},
 ) {
   return render(
     <ProviderSettingsSection
@@ -84,6 +86,7 @@ function renderSection(
       onChanged={vi.fn(async () => {})}
       onError={vi.fn()}
       onToast={vi.fn()}
+      {...callbacks}
     />,
   );
 }
@@ -138,7 +141,7 @@ describe("ProviderSettingsSection", () => {
     expect(document.activeElement).toBe(modelId);
   });
 
-  it("creates a User Provider with explicit model data", async () => {
+  it("creates a User Provider and saves its API key from the same form", async () => {
     renderSection([builtin]);
 
     addCustomProvider();
@@ -148,6 +151,9 @@ describe("ProviderSettingsSection", () => {
     fireEvent.change(screen.getByTestId("provider-model-id-0"), {
       target: { value: "local-model" },
     });
+    const keyInput = screen.getByLabelText("API key") as HTMLInputElement;
+    expect(keyInput.type).toBe("password");
+    fireEvent.change(keyInput, { target: { value: "custom-secret" } });
     fireEvent.submit(screen.getByTestId("provider-form"));
 
     await waitFor(() =>
@@ -170,6 +176,90 @@ describe("ProviderSettingsSection", () => {
     expect(fake.client.createProvider.mock.calls[0]?.[0].models[0]).not.toHaveProperty(
       "thinkingLevels",
     );
+    expect(fake.client.createProvider.mock.calls[0]?.[0]).not.toHaveProperty("apiKey");
+    await waitFor(() => expect(fake.client.setCredential).toHaveBeenCalledWith({
+      providerId: "loopback", apiKey: "custom-secret",
+    }));
+    await waitFor(() => expect(screen.queryByTestId("provider-form")).toBeNull());
+  });
+
+  it("discards the key when switching to no authentication", async () => {
+    renderSection([]);
+    addCustomProvider();
+    fireEvent.change(screen.getByTestId("provider-draft-api-key"), { target: { value: "discarded-secret" } });
+    fireEvent.change(screen.getByTestId("provider-auth-mode"), { target: { value: "none" } });
+    expect(screen.queryByTestId("provider-draft-api-key")).toBeNull();
+    fireEvent.change(screen.getByTestId("provider-auth-mode"), { target: { value: "api_key" } });
+    expect((screen.getByTestId("provider-draft-api-key") as HTMLInputElement).value).toBe("");
+    fireEvent.change(screen.getByTestId("provider-auth-mode"), { target: { value: "none" } });
+    fireEvent.change(screen.getByTestId("provider-model-id-0"), { target: { value: "local-model" } });
+    fireEvent.submit(screen.getByTestId("provider-form"));
+    await waitFor(() => expect(screen.queryByTestId("provider-form")).toBeNull());
+    expect(fake.client.createProvider).toHaveBeenCalledWith(expect.objectContaining({ authMode: "none" }));
+    expect(fake.client.setCredential).not.toHaveBeenCalled();
+  });
+
+  it("retains input after a key save fails and retries without creating another Provider", async () => {
+    const onError = vi.fn();
+    fake.client.setCredential.mockRejectedValueOnce(new Error("Credential storage unavailable"));
+    renderSection([], [], { onError });
+    addCustomProvider();
+    fireEvent.change(screen.getByTestId("provider-id"), { target: { value: "loopback" } });
+    fireEvent.change(screen.getByTestId("provider-model-id-0"), { target: { value: "local-model" } });
+    fireEvent.change(screen.getByTestId("provider-draft-api-key"), { target: { value: "retry-secret" } });
+    fireEvent.submit(screen.getByTestId("provider-form"));
+    await waitFor(() => expect(onError).toHaveBeenCalledWith(expect.stringContaining("API key could not be saved")));
+    expect((screen.getByTestId("provider-draft-api-key") as HTMLInputElement).value).toBe("retry-secret");
+    expect((screen.getByTestId("provider-id") as HTMLInputElement).disabled).toBe(true);
+    fireEvent.change(screen.getByTestId("provider-name"), { target: { value: "Revised name" } });
+    fireEvent.submit(screen.getByTestId("provider-form"));
+    await waitFor(() => expect(screen.queryByTestId("provider-form")).toBeNull());
+    expect(fake.client.createProvider).toHaveBeenCalledTimes(1);
+    expect(fake.client.updateProvider).toHaveBeenCalledWith("loopback", expect.objectContaining({ name: "Revised name" }));
+    expect(fake.client.setCredential).toHaveBeenCalledTimes(2);
+    expect(fake.client.setCredential).toHaveBeenLastCalledWith({ providerId: "loopback", apiKey: "retry-secret" });
+  });
+
+  it("retries a failed refresh without recreating the Provider or resending its saved key", async () => {
+    const onError = vi.fn();
+    const onChanged = vi.fn().mockRejectedValueOnce(new Error("Refresh unavailable")).mockResolvedValue(undefined);
+    renderSection([], [], { onError, onChanged });
+    addCustomProvider();
+    fireEvent.change(screen.getByTestId("provider-id"), { target: { value: "loopback" } });
+    fireEvent.change(screen.getByTestId("provider-model-id-0"), { target: { value: "local-model" } });
+    fireEvent.change(screen.getByTestId("provider-draft-api-key"), { target: { value: "saved-secret" } });
+    fireEvent.submit(screen.getByTestId("provider-form"));
+    await waitFor(() => expect(onError).toHaveBeenCalledWith("Refresh unavailable"));
+    expect((screen.getByTestId("provider-draft-api-key") as HTMLInputElement).value).toBe("");
+    fireEvent.submit(screen.getByTestId("provider-form"));
+    await waitFor(() => expect(screen.queryByTestId("provider-form")).toBeNull());
+    expect(fake.client.createProvider).toHaveBeenCalledTimes(1);
+    expect(fake.client.updateProvider).toHaveBeenCalledTimes(1);
+    expect(fake.client.setCredential).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps an existing Credential when configuration is saved with a blank key", async () => {
+    renderSection([userProvider({ authMode: "api_key", supportsApiKey: true })], [{ providerId: "loopback", type: "api_key" }]);
+    selectProvider("loopback");
+    fireEvent.click(screen.getByTestId("provider-edit"));
+    expect(screen.getByText("Leave blank to keep the saved credential.")).toBeTruthy();
+    expect((screen.getByTestId("provider-draft-api-key") as HTMLInputElement).value).toBe("");
+    fireEvent.submit(screen.getByTestId("provider-form"));
+    await waitFor(() => expect(screen.queryByTestId("provider-form")).toBeNull());
+    expect(fake.client.updateProvider).toHaveBeenCalledTimes(1);
+    expect(fake.client.setCredential).not.toHaveBeenCalled();
+    expect(fake.client.deleteCredential).not.toHaveBeenCalled();
+  });
+
+  it("discards a replacement key when leaving the configuration editor", () => {
+    renderSection([userProvider({ authMode: "api_key", supportsApiKey: true })], [{ providerId: "loopback", type: "api_key" }]);
+    selectProvider("loopback");
+    fireEvent.click(screen.getByTestId("provider-edit"));
+    fireEvent.change(screen.getByTestId("provider-draft-api-key"), { target: { value: "discarded-secret" } });
+    fireEvent.click(screen.getByTestId("provider-back"));
+    fireEvent.click(screen.getByRole("button", { name: "Change credential" }));
+    expect((screen.getByTestId("provider-api-key-loopback") as HTMLInputElement).value).toBe("");
+    expect(fake.client.setCredential).not.toHaveBeenCalled();
   });
 
   it("edits Supported Effort as Pi-native reasoning metadata", async () => {

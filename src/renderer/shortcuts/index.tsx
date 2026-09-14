@@ -109,6 +109,9 @@ export function ShortcutProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
+      // A customizable native select is a top-layer surface. Let the browser
+      // handle its keys before any app shortcut or outer Escape layer.
+      if (document.querySelector("select:open")) return;
       const active = document.activeElement as HTMLElement | null;
       const isInputFocused = active?.tagName === "INPUT"
         || active?.tagName === "TEXTAREA"

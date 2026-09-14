@@ -1,7 +1,9 @@
+import type { VersionChange, VersionFileDiff, RestoreVersionResult, SaveVersionResult, VersionsSnapshot } from "../../shared/versions";
+import type { WorkspaceFileChange, WorkspaceFileReport } from "../../shared/workspace";
 import type {
   AppDefaults,
   AppDefaultsUpdate,
-  ReviewSettings,
+  UtilitySettings,
   AuthenticationCancelRequest,
   AuthenticationRespondRequest,
   AuthenticationStartRequest,
@@ -254,6 +256,30 @@ export function createBrowserClient(): WikilotClient {
       });
     },
 
+    uploadWorkspaceFiles(workspaceId, destination, entries, signal) {
+      let source = -1;
+      const manifest = new TextEncoder().encode(JSON.stringify({ workspaceId, destination,
+        entries: entries.map(entry => {
+          if (!entry.path.includes("/")) source++;
+          return { source, path: entry.path, kind: entry.file ? "file" : "directory", size: entry.file?.size ?? 0 };
+        }),
+      }));
+      const header = new Uint8Array(4);
+      new DataView(header.buffer).setUint32(0, manifest.length);
+      return fetchJson<WorkspaceFileReport>("/api/workspace/files/upload", {
+        method: "POST", signal, headers: { "Content-Type": "application/octet-stream" },
+        body: new Blob([header, manifest, ...entries.flatMap(entry => entry.file ? [entry.file] : [])]),
+      });
+    },
+
+    importWorkspaceFiles(workspaceId, destination, kind) {
+      return postJson<WorkspaceFileReport | null>("/api/workspace/files/import", { workspaceId, destination, kind });
+    },
+
+    changeWorkspaceFiles(workspaceId, change: WorkspaceFileChange) {
+      return postJson<WorkspaceFileReport>("/api/workspace/files/change", { workspaceId, change });
+    },
+
     createWorkspaceMarkdown(workspaceId, path) {
       return postJson<MarkdownDocumentSnapshot>("/api/workspace/links/create", {
         workspaceId,
@@ -373,12 +399,27 @@ export function createBrowserClient(): WikilotClient {
       return fetchJson<AppDefaults>("/api/defaults");
     },
 
-    getReviewSettings() {
-      return fetchJson<ReviewSettings>("/api/review/settings");
+    restoreVersion(workspaceId, versionId) {
+      return postJson<RestoreVersionResult>("/api/workspace/versions/restore", { workspaceId, versionId });
+    },
+    getVersionChanges(workspaceId) {
+      return postJson<VersionChange[]>("/api/workspace/versions/changes", { workspaceId });
+    },
+    getVersionFileDiff(workspaceId, path) {
+      return postJson<VersionFileDiff>("/api/workspace/versions/diff", { workspaceId, path });
+    },
+    getVersions(workspaceId, offset) {
+      return postJson<VersionsSnapshot>("/api/workspace/versions", { workspaceId, offset });
+    },
+    saveVersion(workspaceId, request) {
+      return postJson<SaveVersionResult>("/api/workspace/versions/save", { workspaceId, ...request });
+    },
+    getUtilitySettings() {
+      return fetchJson<UtilitySettings>("/api/utility-model/settings");
     },
 
-    updateReviewSettings(settings: ReviewSettings) {
-      return postJson<ReviewSettings>("/api/review/settings", settings);
+    updateUtilitySettings(settings: UtilitySettings) {
+      return postJson<UtilitySettings>("/api/utility-model/settings", settings);
     },
 
     updateAppDefaults(patch: AppDefaultsUpdate) {

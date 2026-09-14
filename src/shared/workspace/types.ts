@@ -1,3 +1,4 @@
+import type { VersionsChangedEvent } from "../versions";
 import type { ThinkingLevel } from "../settings";
 import type {
   SessionRuntimeStatus,
@@ -275,7 +276,7 @@ export type WorkspaceLinkIndexChangedEvent = {
 export type WorkspaceEvent = WorkspaceFilesChangedEvent | WorkspaceLinkIndexChangedEvent;
 
 /** Everything the Host event stream can deliver. */
-export type ApplicationEvent = TimelineDeltaEvent | WorkspaceEvent;
+export type ApplicationEvent = TimelineDeltaEvent | WorkspaceEvent | VersionsChangedEvent;
 
 export function isWorkspaceFilesChangedEvent(
   event: ApplicationEvent,

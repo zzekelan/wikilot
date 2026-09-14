@@ -1,5 +1,5 @@
 import type { SessionSkill } from "../../shared/workspace";
-import { PROMPT_COMMANDS, type PromptCommandId } from "../../shared/session";
+import { PROMPT_COMMANDS, matchPromptCommand, type PromptCommandId } from "../../shared/session";
 
 export type ComposerCommandId = "model" | "thinking" | "wiki" | "reload";
 
@@ -61,6 +61,7 @@ export const COMPOSER_COMMANDS: readonly (ComposerActionCommand | ComposerPrompt
 
 /** The command token exists only when slash is the first character. */
 export function composerCommandQuery(text: string): string | null {
+  if (matchPromptCommand(text) && /\s/u.test(text)) return null;
   if (/^\/skill:[^\s]+\s/u.test(text)) return null;
   const match = /^\/([^\s]*)/u.exec(text);
   return match ? match[1] ?? "" : null;

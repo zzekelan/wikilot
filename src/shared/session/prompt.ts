@@ -1,4 +1,4 @@
-import { PROMPT_COMMANDS, type PromptCommandId } from "./prompt-commands.ts";
+import { matchPromptCommand, type PromptCommandId } from "./prompt-commands.ts";
 
 export const PROMPT_ENTRY_TYPE = "wikilot.prompt";
 export const PROMPT_ENTRY_VERSION = 1;
@@ -324,8 +324,8 @@ export function normalizeStructuredPrompt(value: unknown): StructuredPrompt {
   if (!text && clips.length === 0) {
     throw new Error("Prompt text or at least one Context Clip is required");
   }
-  const command = input.command;
-  if (command !== undefined && (command !== "init" || text !== PROMPT_COMMANDS[command].label)) {
+  const command = input.command === undefined ? undefined : matchPromptCommand(text);
+  if (input.command !== undefined && (command === undefined || input.command !== command)) {
     throw new Error("Invalid Prompt command");
   }
   return { workspaceId, sessionId, text, clips, ...(command !== undefined ? { command } : {}) };

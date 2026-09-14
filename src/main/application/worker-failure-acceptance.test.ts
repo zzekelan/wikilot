@@ -16,10 +16,6 @@ import {
 } from "@opentelemetry/sdk-trace-base";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { TimelineDeltaEvent } from "../../shared/timeline";
-import {
-  isWorkspaceFilesChangedEvent,
-  isWorkspaceLinkIndexChangedEvent,
-} from "../../shared/workspace";
 import { initHostTelemetry, shutdownHostTelemetry } from "../telemetry";
 import { createWikilotApplication } from "./wikilot-application";
 
@@ -199,7 +195,7 @@ export default function (pi) {
       });
       const events: TimelineDeltaEvent[] = [];
       app.subscribeEvents((event) => {
-        if (!isWorkspaceFilesChangedEvent(event) && !isWorkspaceLinkIndexChangedEvent(event)) {
+        if ("delta" in event) {
           events.push(event);
         }
       });

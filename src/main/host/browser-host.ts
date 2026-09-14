@@ -1,6 +1,7 @@
+import { receiveFileUpload } from "./file-upload";
+import type { WorkspaceFileChange } from "../../shared/workspace";
 import { normalizeStructuredPrompt } from "../../shared/session";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { parseReviewSettings } from "../automatic-review";
 import {
   assertKnownFields,
   PROVIDER_INPUT_FIELDS,
@@ -40,6 +41,8 @@ import {
 import type { WikilotApplication } from "../application";
 import {
   createMacOsDirectoryPicker,
+  createMacOsImportPicker,
+  type ImportPicker,
   type DirectoryPicker,
 } from "./directory-picker";
 
@@ -434,6 +437,7 @@ function isSameOrigin(req: IncomingMessage): boolean {
 export type BrowserHostOptions = {
   /** Native directory chooser adapter (tests/acceptance; default: macOS). */
   pickDirectory?: DirectoryPicker;
+  pickImport?: ImportPicker;
 };
 
 /**
@@ -446,6 +450,7 @@ export function createBrowserHostMiddleware(
   options: BrowserHostOptions = {},
 ) {
   const pickDirectory = options.pickDirectory ?? createMacOsDirectoryPicker();
+  const pickImport = options.pickImport ?? createMacOsImportPicker();
   return async (req: IncomingMessage, res: ServerResponse, next: Next) => {
     const url = req.url ?? "";
     const path = url.split("?")[0] ?? "";
@@ -483,6 +488,46 @@ export function createBrowserHostMiddleware(
         if (!res.writableEnded && !res.destroyed) {
           sendJson(res, 200, { cwd } satisfies WorkspaceDirectoryPickResponse);
         }
+        return;
+      }
+
+      if (req.method === "POST" && path === "/api/workspace/files/upload") {
+        if (!isLoopbackCaller(req) || !isSameOrigin(req)) {
+          sendError(res, 403, "Import is only available to the local Browser UI");
+          return;
+        }
+        const cancellation = new AbortController();
+        const onClose = () => { if (!res.writableEnded) cancellation.abort(); };
+        res.on("close", onClose);
+        try {
+          const report = await receiveFileUpload(req, cancellation.signal,
+            (workspaceId, destination, sources) => app.importWorkspaceFiles(workspaceId, destination, sources, cancellation.signal));
+          if (!res.destroyed) sendJson(res, 200, report);
+        } finally { res.removeListener("close", onClose); }
+        return;
+      }
+
+      if (req.method === "POST" && path === "/api/workspace/files/import") {
+        if (!isLoopbackCaller(req) || !isSameOrigin(req)) {
+          sendError(res, 403, "Import is only available to the local Browser UI");
+          return;
+        }
+        const body = await readJsonBody(req) as Record<string, unknown>;
+        if (!body || Object.keys(body).some(key => !["workspaceId", "destination", "kind"].includes(key)) ||
+            typeof body.destination !== "string" || (body.kind !== "file" && body.kind !== "directory")) {
+          throw new Error("Import requires a destination and system chooser kind; local source paths are not accepted.");
+        }
+        const workspaceId = requireString(body.workspaceId, "workspaceId");
+        req.setTimeout(0);
+        const cancellation = new AbortController();
+        const onClose = () => { if (!res.writableEnded) cancellation.abort(); };
+        res.on("close", onClose);
+        try {
+          const sources = await pickImport({ kind: body.kind, signal: cancellation.signal });
+          if (cancellation.signal.aborted) return;
+          const report = sources === null ? null : await app.importWorkspaceFiles(workspaceId, body.destination, sources);
+          if (!res.writableEnded && !res.destroyed) sendJson(res, 200, report);
+        } finally { res.removeListener("close", onClose); }
         return;
       }
 
@@ -649,6 +694,16 @@ export function createBrowserHostMiddleware(
             ...(subpath ? { subpath } : {}),
           },
         ));
+        return;
+      }
+
+      if (req.method === "POST" && path === "/api/workspace/files/change") {
+        if (!isLoopbackCaller(req) || !isSameOrigin(req)) {
+          sendError(res, 403, "File changes are only available to the local Browser UI");
+          return;
+        }
+        const body = (await readJsonBody(req)) as { workspaceId: string; change: WorkspaceFileChange };
+        sendJson(res, 200, await app.changeWorkspaceFiles(requireString(body?.workspaceId, "workspaceId"), body?.change));
         return;
       }
 
@@ -919,13 +974,45 @@ export function createBrowserHostMiddleware(
         return;
       }
 
-      if (req.method === "GET" && path === "/api/review/settings") {
-        sendJson(res, 200, app.getReviewSettings());
+      if (req.method === "POST" && path === "/api/workspace/versions") {
+        const body = readKnownObject(await readJsonBody(req), ["workspaceId", "offset"], "Versions request");
+        if (body.offset !== undefined && (typeof body.offset !== "number" || !Number.isSafeInteger(body.offset) || body.offset < 0)) {
+          throw new Error("Invalid versions offset");
+        }
+        sendJson(res, 200, await app.getVersions(requireString(body.workspaceId, "workspaceId"), body.offset as number | undefined));
+        return;
+      }
+      if (req.method === "POST" && path === "/api/workspace/versions/changes") {
+        const body = readKnownObject(await readJsonBody(req), ["workspaceId"], "Current changes request");
+        sendJson(res, 200, await app.getVersionChanges(requireString(body.workspaceId, "workspaceId")));
+        return;
+      }
+      if (req.method === "POST" && path === "/api/workspace/versions/diff") {
+        const body = readKnownObject(await readJsonBody(req), ["workspaceId", "path"], "Current diff request");
+        sendJson(res, 200, await app.getVersionFileDiff(requireString(body.workspaceId, "workspaceId"), requireString(body.path, "path")));
+        return;
+      }
+      if (req.method === "POST" && path === "/api/workspace/versions/restore") {
+        const body = readKnownObject(await readJsonBody(req), ["workspaceId", "versionId"], "Restore version request");
+        sendJson(res, 200, await app.restoreVersion(requireString(body.workspaceId, "workspaceId"), requireString(body.versionId, "versionId")));
+        return;
+      }
+      if (req.method === "POST" && path === "/api/workspace/versions/save") {
+        const body = readKnownObject(await readJsonBody(req), ["workspaceId", "message", "sessionId"], "Save version request");
+        sendJson(res, 200, await app.saveVersion(requireString(body.workspaceId, "workspaceId"), {
+          ...(body.message === undefined ? {} : { message: requireString(body.message, "message") }),
+          ...(body.sessionId === undefined ? {} : { sessionId: requireString(body.sessionId, "sessionId") }),
+        }));
         return;
       }
 
-      if (req.method === "POST" && path === "/api/review/settings") {
-        sendJson(res, 200, app.updateReviewSettings(parseReviewSettings(await readJsonBody(req))));
+      if (req.method === "GET" && path === "/api/utility-model/settings") {
+        sendJson(res, 200, app.getUtilitySettings());
+        return;
+      }
+
+      if (req.method === "POST" && path === "/api/utility-model/settings") {
+        sendJson(res, 200, app.updateUtilitySettings(await readJsonBody(req)));
         return;
       }
 

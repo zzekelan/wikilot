@@ -10,7 +10,7 @@ export {
   normalizeStructuredPrompt,
   readPromptRecord,
   sameContextClip,
-} from "./prompt";
+} from "./prompt.ts";
 export type {
   ContextClip,
   PromptRecord,
@@ -21,7 +21,7 @@ export type {
   PdfSpanLocator,
   PdfTextBox,
   StructuredPrompt,
-} from "./prompt";
+} from "./prompt.ts";
 
-export { PROMPT_COMMANDS } from "./prompt-commands";
-export type { PromptCommandId } from "./prompt-commands";
+export { PROMPT_COMMANDS, matchPromptCommand, promptCommandText } from "./prompt-commands.ts";
+export type { PromptCommandId } from "./prompt-commands.ts";

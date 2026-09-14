@@ -15,8 +15,6 @@ import type { ProviderInput } from "../../shared/settings";
 import type { TimelineDeltaEvent } from "../../shared/timeline";
 import {
   initialWorkspacePaneState,
-  isWorkspaceFilesChangedEvent,
-  isWorkspaceLinkIndexChangedEvent,
   openWorkspacePaneTab,
   setWorkspacePanePosition,
 } from "../../shared/workspace";
@@ -52,6 +50,21 @@ describe("WikilotApplication (transport-neutral boundary)", () => {
       sessionsRoot,
     };
   }
+
+  it("validates Utility Model settings at the application boundary before persisting", async () => {
+    const { app } = setup();
+    try {
+      const selection = { model: { provider: "provider", model: "model", thinkingLevel: "off" } };
+      expect(app.updateUtilitySettings(selection)).toEqual(selection);
+      for (const input of [null, [], {}, { model: {} }, { model: { provider: "provider" } },
+        { model: { provider: " ", model: "model" } }, { model: null, extra: true }]) {
+        expect(() => app.updateUtilitySettings(input)).toThrow();
+        expect(app.getUtilitySettings()).toEqual(selection);
+      }
+      expect(app.updateUtilitySettings({ model: null })).toEqual({ model: null });
+      expect(app.getUtilitySettings()).toEqual({ model: null });
+    } finally { await app.shutdown(); }
+  });
 
   function tempWorkspace(name: string): string {
     const cwd = join(tempRoot(), name);
@@ -346,7 +359,7 @@ describe("WikilotApplication (transport-neutral boundary)", () => {
     const summary = app.openWorkspace({ cwd });
     const events: TimelineDeltaEvent[] = [];
     const unsubscribe = app.subscribeEvents((event) => {
-      if (!isWorkspaceFilesChangedEvent(event) && !isWorkspaceLinkIndexChangedEvent(event)) {
+      if ("delta" in event) {
         events.push(event);
       }
     });

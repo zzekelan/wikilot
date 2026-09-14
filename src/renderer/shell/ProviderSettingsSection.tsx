@@ -153,6 +153,7 @@ export function ProviderSettingsSection({
   const [draft, setDraft] = useState<ProviderDraft>(() => blankProvider());
   const [editing, setEditing] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [createdProviderId, setCreatedProviderId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [catalog, setCatalog] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
@@ -198,6 +199,7 @@ export function ProviderSettingsSection({
     setMoreOpen(false);
     setEditing(false);
     setCreating(false);
+    setCreatedProviderId(null);
     setDraft(blankProvider());
     setApiKey("");
     setDeleteConfirmationOpen(false);
@@ -214,6 +216,7 @@ export function ProviderSettingsSection({
     setSelectedId(provider.providerId);
     setMoreOpen(false);
     setCreating(false);
+    setCreatedProviderId(null);
     setApiKey("");
     onError(null);
     setEditing(false);
@@ -281,15 +284,32 @@ export function ProviderSettingsSection({
     onError(null);
     try {
       const input = toProviderInput(draft);
-      const saved = editing
-        ? await client.updateProvider(draft.providerId, input)
+      const saved = editing || createdProviderId
+        ? await client.updateProvider(createdProviderId ?? draft.providerId, input)
         : await client.createProvider(input);
+      // Configuration and Credentials have separate stores. Remember creation
+      // so a failed key save or refresh can be retried without a second Provider.
+      if (creating) setCreatedProviderId(saved.providerId);
+      if (input.authMode === "api_key" && apiKey.trim()) {
+        try {
+          await client.setCredential({ providerId: saved.providerId, apiKey });
+        } catch (error) {
+          await onChanged();
+          throw new Error(`Provider configuration saved, but the API key could not be saved. Try again. ${errorMessage(error)}`);
+        }
+        setApiKey("");
+        recordUiGesture("credential.save", {
+          "wikilot.gesture": "credential.save",
+          "wikilot.llm.provider": saved.providerId,
+        });
+      }
       await onChanged();
       setSelectedId(saved.providerId);
       setCatalog(false);
       setQuery("");
       setEditing(false);
       setCreating(false);
+      setCreatedProviderId(null);
       setDraft(providerDraft(saved));
       onToast(editing ? "Provider updated." : "Provider created.");
     } catch (error) {
@@ -466,7 +486,7 @@ export function ProviderSettingsSection({
             aria-label={`Back to ${editing ? selected?.name : catalog && (selected || creating) ? "Add Provider" : "Providers"}`}
             title={`Back to ${editing ? selected?.name : catalog && (selected || creating) ? "Add Provider" : "Providers"}`}
             onClick={() => {
-              if (editing) { setEditing(false); return; }
+              if (editing) { setEditing(false); setApiKey(""); onError(null); return; }
               if (selected || creating) clearSelection();
               else { setCatalog(false); setQuery(""); }
             }}>
@@ -495,7 +515,7 @@ export function ProviderSettingsSection({
           {selected?.source === "user" && !editing && (
             <div className="settings-page-actions">
               <button type="button" className="btn-secondary" data-testid="provider-edit" disabled={busy}
-                onClick={() => { setDraft(providerDraft(selected)); setEditing(true); setMoreOpen(false); }}>Edit configuration</button>
+                onClick={() => { setDraft(providerDraft(selected)); setApiKey(""); setEditing(true); setMoreOpen(false); }}>Edit configuration</button>
             <div className="settings-more" ref={moreRef}>
               <button type="button" className="icon-btn" aria-label="Provider actions" aria-expanded={moreOpen}
                 onClick={() => setMoreOpen(!moreOpen)} disabled={busy}><MoreHorizontal size={18} /></button>
@@ -661,7 +681,7 @@ export function ProviderSettingsSection({
                   }
                   spellCheck={false}
                   autoComplete="off"
-                  disabled={busy || editing}
+                  disabled={busy || editing || createdProviderId !== null}
                 />
               </div>
 
@@ -717,12 +737,13 @@ export function ProviderSettingsSection({
                   className="workspace-input settings-select"
                   data-testid="provider-auth-mode"
                   value={draft.authMode}
-                  onChange={(event) =>
+                  onChange={(event) => {
+                    setApiKey("");
                     setDraft((current) => ({
                       ...current,
                       authMode: event.target.value as ProviderInput["authMode"],
-                    }))
-                  }
+                    }));
+                  }}
                   disabled={busy}
                 >
                   {PROVIDER_AUTH_MODES.map((mode) => (
@@ -732,6 +753,31 @@ export function ProviderSettingsSection({
                   ))}
                 </select>
               </div>
+              {draft.authMode === "api_key" && (
+                <div className="settings-form-field settings-form-field-span">
+                  <label className="workspace-label" htmlFor="provider-draft-api-key">
+                    API key
+                  </label>
+                  <input
+                    id="provider-draft-api-key"
+                    className="workspace-input workspace-input-mono"
+                    data-testid="provider-draft-api-key"
+                    type="password"
+                    value={apiKey}
+                    onChange={(event) => setApiKey(event.target.value)}
+                    placeholder={selectedCredential ? "Enter a replacement key" : "Enter API key"}
+                    aria-describedby="provider-draft-api-key-hint"
+                    autoComplete="new-password"
+                    spellCheck={false}
+                    disabled={busy}
+                  />
+                  <p className="settings-hint" id="provider-draft-api-key-hint">
+                    {selectedCredential
+                      ? "Leave blank to keep the saved credential."
+                      : "Optional. You can add it later."}
+                  </p>
+                </div>
+              )}
             </div>
 
             <div className="settings-provider-model-heading">
@@ -907,12 +953,14 @@ export function ProviderSettingsSection({
                 data-testid="provider-save"
                 disabled={busy}
               >
-                <span>{editing ? "Save Changes" : "Create Provider"}</span>
+                <span>{busy ? "Saving…" : editing || createdProviderId ? "Save Changes" : "Create Provider"}</span>
               </button>
               <button type="button" className="btn-secondary" disabled={busy} onClick={() => {
                 setEditing(false);
                 setCreating(false);
+                setCreatedProviderId(null);
                 setApiKey("");
+                onError(null);
               }}>Cancel</button>
             </div>
           </form>

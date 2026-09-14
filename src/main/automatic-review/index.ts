@@ -1,12 +1,13 @@
 import type { AgentSession, ModelRuntime, SettingsManager, ToolDefinition } from "@earendil-works/pi-coding-agent";
-import type { ReviewSettings } from "../../shared/settings/index.ts";
-import type { AccessMode } from "../../shared/workspace/types.ts";
+import type { UtilitySettings } from "../../shared/settings/index.ts";
+import type { AccessMode } from "../../shared/workspace/index.ts";
 import { beginAutomaticReview } from "../telemetry/index.ts";
 import { isSafeBashCommand } from "./safe-bash.ts";
 import { reviewConversation } from "./context.ts";
-import { constrainReviewOutput, parseReviewDecision } from "./structured-output.ts";
+import { constrainJsonSchemaOutput } from "../models/index.ts";
+import { reviewSchema, parseReviewDecision } from "./structured-output.ts";
 
-export { createReviewSettingsStore, parseReviewSettings } from "./settings.ts";
+import { resolveUtilityModel } from "../utility-model/index.ts";
 
 const POLICY = `You review a proposed tool action before it executes. Return only the JSON Schema decision.
 Evaluate both the concrete risk and authorization in the supplied ordered conversation.
@@ -39,7 +40,7 @@ export function installAutomaticReview(options: {
   session: AgentSession;
   runtime: Pick<ModelRuntime, "getModel" | "completeSimple">;
   settings: Pick<SettingsManager, "getShellCommandPrefix" | "getShellPath">;
-  readSettings(): ReviewSettings | Promise<ReviewSettings>;
+  readSettings(): UtilitySettings | Promise<UtilitySettings>;
   trustedReadTools: readonly ToolDefinition[];
   trustedReadExtensionPaths: readonly string[];
   cwd: string;
@@ -78,9 +79,10 @@ export function installAutomaticReview(options: {
       freezeArguments(call.args);
       const selected = (await options.readSettings()).model;
       reviewSignal.throwIfAborted();
-      const model = selected ? runtime.getModel(selected.provider, selected.model) : session.model;
-      if (!model) throw new Error("Review Model is unavailable. Select an available model in Settings.");
-      constrainReviewOutput(model.api, {}); // Fail before requesting an unsupported protocol.
+      const { model, thinkingLevel } = resolveUtilityModel(runtime, { model: selected }, session.model ? {
+        provider: session.model.provider, model: session.model.id, thinkingLevel: session.thinkingLevel,
+      } : undefined);
+      constrainJsonSchemaOutput(model.api, {}, { name: "automatic_review", schema: reviewSchema }); // Fail before requesting an unsupported protocol.
       const input = JSON.stringify({
         conversation: reviewConversation(session.sessionManager.getBranch()),
         action: { tool, arguments: call.args, cwd: options.cwd,
@@ -90,7 +92,7 @@ export function installAutomaticReview(options: {
       });
       const maxTokens = Math.min(4096, model.maxTokens);
       if (Math.ceil((POLICY.length + input.length) / 4) + maxTokens > model.contextWindow) {
-        throw new Error("Automatic Review input exceeds the Review Model context window");
+        throw new Error("Automatic Review input exceeds the Utility Model context window");
       }
       // One isolated model call using the existing runtime and credential store.
       let constrained = false;
@@ -99,9 +101,9 @@ export function installAutomaticReview(options: {
         messages: [{ role: "user", content: input, timestamp: Date.now() }],
       }, {
         signal: reviewSignal, timeoutMs: REVIEW_TIMEOUT_MS, maxRetries: 0, maxTokens,
-        reasoning: selected || session.thinkingLevel === "off" ? undefined : session.thinkingLevel,
+        reasoning: thinkingLevel === "off" ? undefined : thinkingLevel,
         onPayload(payload) {
-          const constrainedPayload = constrainReviewOutput(model.api, payload);
+          const constrainedPayload = constrainJsonSchemaOutput(model.api, payload, { name: "automatic_review", schema: reviewSchema });
           constrained = true;
           return constrainedPayload;
         },

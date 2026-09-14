@@ -206,9 +206,9 @@ export type AppDefaults = {
   wikiPromptEnabled: boolean;
 };
 
-/** Live application preference, read at the next Automatic Review. */
-export type ReviewSettings = {
-  model: { provider: string; model: string } | null;
+/** Live selection for Automatic Review and version summaries. */
+export type UtilitySettings = {
+  model: SessionModelDefault | null;
 };
 
 /** Complete replacements for new-Session defaults. */

@@ -1,3 +1,4 @@
+import { promptCommandText } from "../../../shared/session/prompt-commands.ts";
 import { readFileSync } from "node:fs";
 import type { StructuredPrompt } from "../../../shared/session/prompt.ts";
 
@@ -38,7 +39,7 @@ export function serializePromptForModel(prompt: StructuredPrompt): string {
     ? ["<context_clips>", ...clips, "</context_clips>"]
     : [];
   const text = prompt.command === "init"
-    ? readFileSync(new URL("./prompts/workspace-init.md", import.meta.url), "utf8").trim()
+    ? [readFileSync(new URL("./prompts/workspace-init.md", import.meta.url), "utf8").trim(), promptCommandText(prompt.text, prompt.command)].filter(Boolean).join("\n\n")
     : prompt.text;
   const skillCommand = /^\/skill:[^\s]+/u.exec(text)?.[0];
   const request = skillCommand ? text.slice(skillCommand.length).trim() : text;

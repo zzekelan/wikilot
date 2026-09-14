@@ -1,8 +1,10 @@
+import type { VersionChange, VersionFileDiff, RestoreVersionResult, SaveVersionRequest, SaveVersionResult, VersionsSnapshot } from "../../shared/versions";
+import type { WorkspaceFileChange, WorkspaceFileReport } from "../../shared/workspace";
 import type { StructuredPrompt } from "../../shared/session";
 import type {
   AppDefaults,
   AppDefaultsUpdate,
-  ReviewSettings,
+  UtilitySettings,
   AuthenticationCancelRequest,
   AuthenticationRespondRequest,
   AuthenticationStartRequest,
@@ -114,6 +116,9 @@ export interface WikilotClient {
     workspaceId: string,
     request: WorkspaceLinkResolveRequest,
   ): Promise<WorkspaceLinkResolution>;
+  uploadWorkspaceFiles(workspaceId: string, destination: string, entries: Array<{ path: string; file?: File }>, signal: AbortSignal): Promise<WorkspaceFileReport>;
+  importWorkspaceFiles(workspaceId: string, destination: string, kind: "file" | "directory"): Promise<WorkspaceFileReport | null>;
+  changeWorkspaceFiles(workspaceId: string, change: WorkspaceFileChange): Promise<WorkspaceFileReport>;
   createWorkspaceMarkdown(
     workspaceId: string,
     path: string,
@@ -153,8 +158,13 @@ export interface WikilotClient {
   /** App Defaults for new Sessions. */
   getAppDefaults(): Promise<AppDefaults>;
   updateAppDefaults(patch: AppDefaultsUpdate): Promise<AppDefaults>;
-  getReviewSettings(): Promise<ReviewSettings>;
-  updateReviewSettings(settings: ReviewSettings): Promise<ReviewSettings>;
+  restoreVersion(workspaceId: string, versionId: string): Promise<RestoreVersionResult>;
+  getVersionChanges(workspaceId: string): Promise<VersionChange[]>;
+  getVersionFileDiff(workspaceId: string, path: string): Promise<VersionFileDiff>;
+  getVersions(workspaceId: string, offset?: number): Promise<VersionsSnapshot>;
+  saveVersion(workspaceId: string, request: SaveVersionRequest): Promise<SaveVersionResult>;
+  getUtilitySettings(): Promise<UtilitySettings>;
+  updateUtilitySettings(settings: UtilitySettings): Promise<UtilitySettings>;
   prompt(prompt: StructuredPrompt): Promise<void>;
   getProjectTrustRequest(
     workspaceId: string,

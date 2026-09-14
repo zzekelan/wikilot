@@ -1,5 +1,9 @@
+import trash from "trash";
+import { importWorkspaceFiles } from "./workspace-import";
 import { randomUUID } from "node:crypto";
 import type {
+  WorkspaceFileChange,
+  WorkspaceFileReport,
   KnownWorkspace,
   KnownWorkspaceListResponse,
   MarkdownDocumentSaveRequest,
@@ -22,6 +26,10 @@ import type {
 import { createKnownWorkspaceStore } from "./known-workspaces";
 import { createWorkspacePaneStore } from "./pane-state";
 import {
+  createWorkspaceEntry,
+  renameWorkspaceEntry,
+  moveWorkspaceEntries,
+  trashWorkspaceEntries,
   listWorkspaceFiles,
   openMarkdownDocument,
   saveMarkdownDocument,
@@ -38,7 +46,6 @@ import {
   findWorkspaceSymlinkPrefix,
   normalizeWorkspaceEventPath,
   normalizeWorkspacePath,
-  resolveWorkspacePath,
 } from "./workspace-path";
 import { createWorkspaceRegistry } from "./workspace-registry";
 import { initializeWorkspace } from "./workspace-initialization";
@@ -46,8 +53,8 @@ import { watchWorkspaceFiles, type WorkspaceFilesListener } from "./workspace-wa
 import { projectWorkspaceGraph } from "./workspace-graph";
 import { buildWorkspaceLinkIndex } from "./workspace-link-index";
 import { resolveWorkspaceLink } from "./workspace-link-index";
-import { dirname, extname, join } from "node:path";
-import { writeFileSync } from "node:fs";
+import { dirname, extname } from "node:path";
+
 
 export type WorkspaceModule = {
   open(cwd: string): WorkspaceSummary;
@@ -68,6 +75,8 @@ export type WorkspaceModule = {
   getGraph(workspaceId: string): WorkspaceGraphSnapshot;
   retryGraph(workspaceId: string): void;
   resolveLink(workspaceId: string, request: WorkspaceLinkResolveRequest): WorkspaceLinkResolution;
+  changeFiles(workspaceId: string, change: WorkspaceFileChange): Promise<WorkspaceFileReport>;
+  importFiles(workspaceId: string, destination: string, sourcePaths: string[], signal?: AbortSignal): Promise<WorkspaceFileReport>;
   createMarkdown(workspaceId: string, path: string): MarkdownDocumentSnapshot;
   getPdfSource(sourceId: string): WorkspacePdfSource;
   /** Revoke an opaque Browser capability. Repeated release is harmless. */
@@ -94,6 +103,7 @@ export type WorkspaceModuleOptions = {
 
 /** Internal adapters vary in module tests; callers use the default real disk watcher. */
 type WorkspaceModuleAdapters = {
+  trashEntry?: (absolutePath: string) => Promise<void>;
   watchFiles(
     cwd: string,
     listener: WorkspaceFilesListener,
@@ -103,6 +113,7 @@ type WorkspaceModuleAdapters = {
 
 const DEFAULT_ADAPTERS: WorkspaceModuleAdapters = {
   watchFiles: watchWorkspaceFiles,
+  trashEntry: path => trash([path], { glob: false }),
 };
 
 /**
@@ -386,7 +397,7 @@ export function createWorkspaceModuleWithAdapters(
     saveMarkdownDocument(workspaceId, path, request) {
       const cwd = requireCwd(workspaceId);
       const normalizedPath = normalizeWorkspacePath(path);
-      return serializeSave(`${cwd}\u0000${normalizedPath}`, () =>
+      return serializeSave(cwd, () =>
         saveMarkdownDocument(cwd, normalizedPath, request),
       );
     },
@@ -421,6 +432,24 @@ export function createWorkspaceModuleWithAdapters(
       };
     },
 
+    async changeFiles(workspaceId, change) {
+      const summary = registry.require(workspaceId);
+      const report = await serializeSave(summary.cwd, async () => change?.kind === "rename"
+        ? renameWorkspaceEntry(summary.cwd, change)
+        : change?.kind === "move" ? moveWorkspaceEntries(summary.cwd, change)
+        : change?.kind === "trash" ? trashWorkspaceEntries(summary.cwd, change, adapters.trashEntry ?? DEFAULT_ADAPTERS.trashEntry!)
+        : createWorkspaceEntry(summary.cwd, change));
+      if (report.created.length || report.relocated.length || report.trashed?.length) queueLinkIndexBuild(summary);
+      return report;
+    },
+
+    async importFiles(workspaceId, destination, sourcePaths, signal) {
+      const summary = registry.require(workspaceId);
+      const report = await serializeSave(summary.cwd, () => importWorkspaceFiles(summary.cwd, destination, sourcePaths, signal));
+      if (report.created.length) queueLinkIndexBuild(summary);
+      return report;
+    },
+
     createMarkdown(workspaceId, inputPath) {
       const summary = registry.require(workspaceId);
       const path = normalizeWorkspacePath(inputPath);
@@ -428,11 +457,8 @@ export function createWorkspaceModuleWithAdapters(
         throw new Error("Only missing Markdown files can be created");
       }
       const parentPath = dirname(path).replace(/^\.$/, "");
-      const parent = resolveWorkspacePath(summary.cwd, parentPath);
-      writeFileSync(join(parent.absolute, path.split("/").at(-1)!), "", {
-        encoding: "utf8",
-        flag: "wx",
-      });
+      const report = createWorkspaceEntry(summary.cwd, { kind: "create", parent: parentPath, name: path.split("/").at(-1)!, entryKind: "file" });
+      if (report.failures.length) throw new Error(report.failures[0]!.message);
       queueLinkIndexBuild(summary);
       return openMarkdownDocument(summary.cwd, path);
     },

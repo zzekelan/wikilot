@@ -119,3 +119,5 @@ export {
   sessionConfigEntryData,
   WIKILOT_SESSION_ENTRY_TYPE,
 } from "./session-configuration.ts";
+
+export type { WorkspaceFileChange, WorkspaceFileReport } from "./file-change";

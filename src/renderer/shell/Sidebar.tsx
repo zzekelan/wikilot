@@ -1,3 +1,5 @@
+import { VersionsDrawer } from "../versions";
+import type { ProtectedFileChangeResult } from "../workspace-pane";
 import {
   useEffect,
   useRef,
@@ -63,6 +65,7 @@ type SidebarProps = {
   /** Opens the removal confirmation; the shell owns the actual removal. */
   onRequestRemoveWorkspace: (workspace: KnownWorkspace) => void;
   onCreateSession: () => void;
+  beforeSaveVersion?: () => Promise<boolean>;
   graphActive: boolean;
   graphStatus: WorkspaceGraphSnapshot["status"];
   onOpenGraph: () => void;
@@ -79,6 +82,9 @@ type SidebarProps = {
   onLeftModeChange: (mode: LeftRailMode) => void;
   activePath: string | null;
   onOpenFile: (path: string) => void;
+  onTrashFiles?: (paths: string[]) => Promise<ProtectedFileChangeResult>;
+  onMoveFiles?: (paths: string[], destination: string) => Promise<ProtectedFileChangeResult>;
+  onRenameFile?: (path: string, name: string) => Promise<ProtectedFileChangeResult>;
 };
 
 type SidebarPrimaryRowProps = Omit<
@@ -162,6 +168,7 @@ export function Sidebar({
   onSwitchWorkspace,
   onRequestRemoveWorkspace,
   onCreateSession,
+  beforeSaveVersion,
   graphActive,
   graphStatus,
   onOpenGraph,
@@ -175,6 +182,9 @@ export function Sidebar({
   onLeftModeChange,
   activePath,
   onOpenFile,
+  onRenameFile,
+  onMoveFiles,
+  onTrashFiles,
 }: SidebarProps) {
   const [contextMenu, setContextMenu] = useState<{
     sessionId: string;
@@ -328,6 +338,8 @@ export function Sidebar({
               onClick={onOpenGraph}
             />
           ) : null}
+          {workspace ? <VersionsDrawer key={workspace.id} workspaceId={workspace.id} sessionId={selectedSession?.id}
+            enabled={!settingsOpen && !opening && !picking} beforeSave={beforeSaveVersion} /> : null}
           </div>
 
           {workspace ? (
@@ -507,6 +519,9 @@ export function Sidebar({
                   workspaceId={workspace.id}
                   activePath={activePath}
                   onOpenFile={onOpenFile}
+                  onRename={onRenameFile}
+                  onMove={onMoveFiles}
+                  onTrash={onTrashFiles}
                 />
               </div>
             </>

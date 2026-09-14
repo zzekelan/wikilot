@@ -16,6 +16,10 @@ body {
   line-height: 1.6;
 }
 
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading);
+}
+
 /* Selection joins the palette: a quiet pine wash instead of the OS default. */
 ::selection {
   background: color-mix(in srgb, var(--color-highlight) 22%, transparent);

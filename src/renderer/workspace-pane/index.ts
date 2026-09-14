@@ -1,5 +1,5 @@
 export { WorkspacePane } from "./WorkspacePane";
-export type { WorkspacePaneSaveController } from "./WorkspacePane";
+export type { ProtectedFileChangeResult, WorkspacePaneSaveController } from "./useWorkspaceDocuments";
 export {
   activateWorkspacePaneTab,
   backWorkspacePaneHistory,

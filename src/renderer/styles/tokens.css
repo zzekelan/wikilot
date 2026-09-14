@@ -1,8 +1,8 @@
 /* Self-hosted fonts (no runtime CDN; Electron offline-safe). Only the
    weights actually used by the design are loaded: Inter 400/500/600 for UI,
    JetBrains Mono 400/500 for code/metadata, Source Serif 4 400/600 (+400
-   italic) for the reading voice — Markdown headings, empty-state headlines,
-   blockquotes. */
+   italic) for the reading voice in blockquotes and supporting copy.
+   Headings use the system Georgia family independently of prose. */
 @import "@fontsource/inter/latin-400.css";
 @import "@fontsource/inter/latin-500.css";
 @import "@fontsource/inter/latin-600.css";
@@ -11,6 +11,26 @@
 @import "@fontsource/source-serif-4/latin-400.css";
 @import "@fontsource/source-serif-4/latin-400-italic.css";
 @import "@fontsource/source-serif-4/latin-600.css";
+
+/* System Georgia only has old-style figures. Use the bundled lining figures
+   for heading digits while Georgia continues to draw the surrounding text. */
+@font-face {
+  font-family: "Heading Numerals";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("@fontsource/source-serif-4/files/source-serif-4-latin-400-normal.woff2") format("woff2");
+  unicode-range: U+0030-0039;
+}
+
+@font-face {
+  font-family: "Heading Numerals";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("@fontsource/source-serif-4/files/source-serif-4-latin-600-normal.woff2") format("woff2");
+  unicode-range: U+0030-0039;
+}
 
 /* "Warm paper / pine ink" design language: a personal wiki assistant should
    feel like a calm writing desk, not a SaaS dashboard. Warm paper neutrals
@@ -32,6 +52,7 @@
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
   --font-serif: "Source Serif 4", ui-serif, Georgia, serif;
+  --font-heading: "Heading Numerals", Georgia, "Times New Roman", serif;
   --color-paper: #f7f5f0;
   --color-ink: #201d18;
   --color-rail: #f1eee6;
@@ -51,6 +72,7 @@
   --color-success-text: #256a45;
   /* Modal scrim: one warm near-black recipe for every overlay backdrop. */
   --color-scrim: rgb(20 18 14 / 32%);
+  --shadow-floating: 0 2px 4px rgb(32 29 24 / 4%), 0 8px 24px rgb(32 29 24 / 9%);
 }
 
 :root.dark {
@@ -73,6 +95,7 @@
   --color-success: #45b079;
   --color-success-text: #45b079;
   --color-scrim: rgb(0 0 0 / 55%);
+  --shadow-floating: 0 2px 4px rgb(0 0 0 / 16%), 0 8px 24px rgb(0 0 0 / 24%);
 }
 
 /* Type scale (rem only). Semantics: xs = overlines/section labels/badges,
@@ -132,6 +155,8 @@
 :root {
   --focus-ring: 0 0 0 2px var(--color-paper), 0 0 0 4px
     color-mix(in srgb, var(--color-highlight) 65%, var(--color-paper));
+  /* Dense menu rows keep their keyboard indicator inside the tile. */
+  --focus-ring-inset: inset 0 0 0 1px var(--color-highlight);
 }
 
 /* Shared pane-chrome metrics: the Sidebar and Workspace Pane align

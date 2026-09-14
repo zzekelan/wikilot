@@ -122,10 +122,92 @@
 }
 
 .file-tree-status-error {
+  margin: var(--space-2) 0;
+  border: 1px solid color-mix(in srgb, var(--color-danger) 35%, transparent);
+  border-radius: var(--radius-xl);
+  background: color-mix(in srgb, var(--color-danger) 10%, var(--color-paper));
   color: var(--color-danger-text);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-md);
+  overflow-wrap: anywhere;
 }
 
 .file-tree-row:focus-visible {
   outline: none;
   box-shadow: var(--focus-ring);
+}
+
+.file-tree-menu {
+  position: fixed;
+  z-index: 1000;
+  min-width: 10rem;
+  max-width: calc(100vw - 16px);
+  max-height: calc(100vh - 16px);
+  overflow: auto;
+  padding: var(--space-1);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-paper);
+  box-shadow: var(--shadow-floating);
+}
+
+.file-tree-menu button {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-ink);
+  font: inherit;
+  font-size: var(--text-md);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s ease-out;
+}
+
+.file-tree-menu button:hover,
+.file-tree-menu button:focus-visible {
+  outline: none;
+  background: var(--color-surface);
+}
+
+.file-tree-menu button:focus-visible {
+  box-shadow: var(--focus-ring-inset);
+}
+
+.file-tree-menu button > svg {
+  flex-shrink: 0;
+  color: var(--color-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .file-tree-menu button { transition: none; }
+}
+
+.file-tree-create input {
+  min-width: 0;
+  width: 100%;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font: inherit;
+  padding: 2px 4px;
+}
+
+.file-tree [data-drop-target="true"] {
+  background: color-mix(in srgb, var(--color-highlight) 15%, var(--color-paper));
+  box-shadow: inset 0 0 0 2px var(--color-highlight);
+  border-radius: var(--radius-lg);
+}
+
+.file-tree-move-report {
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+  max-height: 8rem;
+  overflow: auto;
 }

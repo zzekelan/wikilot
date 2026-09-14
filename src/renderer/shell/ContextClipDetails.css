@@ -54,6 +54,7 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   background: var(--color-paper);
+  box-shadow: var(--shadow-floating);
   padding: var(--space-1);
   animation: context-clip-popover-in 0.15s ease-out;
   outline: none;

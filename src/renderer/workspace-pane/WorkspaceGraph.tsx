@@ -97,14 +97,9 @@ const drawGraphNodeHover: NodeHoverDrawingFunction<NodeAttributes, EdgeAttribute
   context.save();
   context.globalAlpha = 0.15 + progress * 0.85;
   context.fillStyle = data.color;
-  context.strokeStyle = data.color;
-  context.lineWidth = 2;
   context.beginPath();
   context.arc(data.x, data.y, data.size, 0, Math.PI * 2);
   context.fill();
-  context.beginPath();
-  context.arc(data.x, data.y, data.size + 3, 0, Math.PI * 2);
-  context.stroke();
   drawGraphNodeLabel(context, data, settings);
   context.restore();
 };

@@ -130,7 +130,7 @@ describe("Composer layout", () => {
     rerender(<Composer {...props} catalogRevision={1} />);
     await waitFor(() => expect(onModelAvailabilityChange).toHaveBeenLastCalledWith(true));
     fireEvent.click(screen.getByTestId("composer-model-chip"));
-    await screen.findByRole("option", { name: "local/model" });
+    await screen.findByRole("option", { name: "Model" });
     expect((screen.getByTestId("composer-input") as HTMLTextAreaElement).value).toBe("Compare these notes");
     expect(screen.getByRole("button", { name: "1 clip" }).textContent).toContain("plan.md");
     expect(props.onConfigurationChange).not.toHaveBeenCalled();
@@ -174,7 +174,7 @@ describe("Composer command menu", () => {
     expect(input.value).toBe("/init");
   });
 
-  it.each(["Enter", "Tab", "click", "dismissed"])("sends /init as an ordinary Prompt via %s", async (gesture) => {
+  it.each(["Enter", "Tab", "click", "dismissed"])("completes /init via %s before sending the Prompt", async (gesture) => {
     const beforeSend = vi.fn(async () => true);
     render(<Composer {...composer(false, beforeSend).props} clips={[testClip]} />);
     const input = screen.getByTestId("composer-input") as HTMLTextAreaElement;
@@ -184,11 +184,18 @@ describe("Composer command menu", () => {
       if (gesture === "dismissed") fireEvent.keyDown(input, { key: "Escape" });
       fireEvent.keyDown(input, { key: gesture === "Tab" ? "Tab" : "Enter" });
     }
+    if (gesture !== "dismissed") {
+      expect(fake.client.prompt).not.toHaveBeenCalled();
+      expect(input.value).toBe("/init ");
+      expect(screen.queryByTestId("composer-command-menu")).toBeNull();
+      fireEvent.change(input, { target: { value: "/init Use Chinese" } });
+      fireEvent.keyDown(input, { key: "Enter" });
+    }
     await waitFor(() => expect(fake.client.prompt).toHaveBeenCalledOnce());
     expect(beforeSend).toHaveBeenCalledOnce();
     expect(fake.client.prompt).toHaveBeenCalledWith({
       workspaceId: "workspace-1", sessionId: "session-1", clips: [testClip],
-      text: "/init", command: "init",
+      text: gesture === "dismissed" ? "/init" : "/init Use Chinese", command: "init",
     });
     await waitFor(() => expect(input.value).toBe(""));
   });
@@ -202,11 +209,12 @@ describe("Composer command menu", () => {
     const input = screen.getByTestId("composer-input") as HTMLTextAreaElement;
     fireEvent.change(input, { target: { value: "/init" } });
     fireEvent.keyDown(input, { key: "Enter" });
+    fireEvent.keyDown(input, { key: "Enter" });
     if (reason === "save failure") await screen.findByText("Save your Markdown changes before sending.");
     if (reason === "send failure") await screen.findByText("send failed");
     if (reason === "missing model") await waitFor(() => expect(fake.client.getModelCatalog).toHaveBeenCalled());
     expect(fake.client.prompt).toHaveBeenCalledTimes(reason === "send failure" ? 1 : 0);
-    expect(input.value).toBe("/init");
+    expect(input.value).toBe("/init ");
   });
 
   it("closes before an underlying Escape layer", () => {
@@ -671,7 +679,7 @@ describe("Composer pickers", () => {
     expect(screen.queryByTestId("composer-tuning-menu")).toBeNull();
   });
 
-  it("shows canonical Model ids in the picker and the friendly name in the chip", async () => {
+  it("groups friendly Model names under their Provider and marks the applied Model", async () => {
     fake.client.getModelCatalog.mockResolvedValue([
       {
         id: "deepseek",
@@ -698,8 +706,10 @@ describe("Composer pickers", () => {
     fireEvent.click(screen.getByTestId("composer-model-chip"));
     const option = await screen.findByTestId("composer-model-option");
 
-    expect(option.textContent).toBe("deepseek/deepseek-v4-flash");
-    expect(option.textContent).not.toContain("DeepSeek V4 Flash");
+    expect(option.textContent).toBe("DeepSeek V4 Flash");
+    expect(screen.getByRole("group", { name: "DeepSeek" }).contains(option)).toBe(true);
+    expect(option.getAttribute("aria-selected")).toBe("true");
+    expect(option.getAttribute("title")).toBe("deepseek/deepseek-v4-flash");
     expect(screen.getByTestId("composer-model-chip").textContent).toBe(
       "DeepSeek V4 Flash· Off",
     );

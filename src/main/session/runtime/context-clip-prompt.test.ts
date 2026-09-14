@@ -130,3 +130,9 @@ describe("Context Clip model Prompt", () => {
     expect(result.join("\n")).toMatch(/current Workspace source may differ/i);
   });
 });
+
+it("preserves the user's task after the initialization command", () => {
+  const serialized = serializePromptForModel({ workspaceId: "workspace", sessionId: "session", text: "/init Use Chinese", command: "init", clips: [] });
+  expect(serialized).toContain("develop or refine its schema");
+  expect(serialized).toContain("Use Chinese");
+});

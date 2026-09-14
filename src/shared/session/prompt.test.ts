@@ -10,6 +10,9 @@ import {
 it("validates and preserves Prompt command identity in its Prompt record", () => {
   const prompt = normalizeStructuredPrompt({ workspaceId: "workspace", sessionId: "session", text: "/init", command: "init", clips: [] });
   expect(readPromptRecord(createPromptRecord(prompt))).toEqual({ version: 1, text: "/init", command: "init", clips: [] });
+  const withTask = normalizeStructuredPrompt({ ...prompt, text: "/init Use Chinese" });
+  expect(readPromptRecord(createPromptRecord(withTask))?.text).toBe("/init Use Chinese");
+  expect(() => normalizeStructuredPrompt({ ...prompt, text: "/initialize" })).toThrow("Invalid Prompt command");
   expect(() => normalizeStructuredPrompt({ ...prompt, command: "unknown" })).toThrow("Invalid Prompt command");
   expect(() => normalizeStructuredPrompt({ ...prompt, text: "unrelated text" })).toThrow("Invalid Prompt command");
 });

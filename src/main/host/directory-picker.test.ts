@@ -2,6 +2,7 @@ import { EventEmitter } from "node:events";
 import { describe, expect, it, vi } from "vitest";
 import {
   createMacOsDirectoryPicker,
+  createMacOsImportPicker,
   type DirectoryPickerChild,
   type DirectoryPickerSpawn,
 } from "./directory-picker";
@@ -118,4 +119,43 @@ describe("macOS directory picker (owned osascript adapter)", () => {
     ).rejects.toThrow(/^The native directory chooser is only available on macOS\.$/);
     expect(spawnProcess).not.toHaveBeenCalled();
   });
+});
+
+it("returns all native file selections without splitting whitespace or newlines in paths", async () => {
+  const child = fakeChildProcess();
+  const spawnProcess = fakeSpawn(child);
+  const pick = createMacOsImportPicker({ spawnProcess });
+  const result = pick({ kind: "file", signal: new AbortController().signal });
+  expect(spawnProcess.mock.calls[0]?.[1].join(" ")).toContain("multiple selections allowed");
+  child.succeed("/tmp/a,b.png\0/tmp/ spaced \nname.pdf\n");
+  await expect(result).resolves.toEqual(["/tmp/a,b.png", "/tmp/ spaced \nname.pdf"]);
+});
+
+it("selects an import folder and preserves its path", async () => {
+  const child = fakeChildProcess();
+  const spawnProcess = fakeSpawn(child);
+  const result = createMacOsImportPicker({ spawnProcess })({ kind: "directory", signal: new AbortController().signal });
+  expect(spawnProcess.mock.calls[0]?.[1].join(" ")).toContain("choose folder");
+  child.succeed("/tmp/资料/\n");
+  await expect(result).resolves.toEqual(["/tmp/资料"]);
+});
+
+it("settles cancelled native imports quietly and kills a stubborn chooser after disconnect", async () => {
+  const cancelled = fakeChildProcess();
+  const selection = createMacOsImportPicker({ spawnProcess: fakeSpawn(cancelled) })({ kind: "file", signal: new AbortController().signal });
+  cancelled.fail(1, "用户已取消。 (-128)\n");
+  await expect(selection).resolves.toBeNull();
+  vi.useFakeTimers();
+  try {
+    const child = fakeChildProcess();
+    const controller = new AbortController();
+    const result = createMacOsImportPicker({ spawnProcess: fakeSpawn(child) })({ kind: "directory", signal: controller.signal });
+    controller.abort();
+    await expect(result).resolves.toBeNull();
+    expect(child.kill).toHaveBeenCalledWith("SIGTERM");
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(child.kill).toHaveBeenCalledWith("SIGKILL");
+    child.fail(1, "");
+    expect(vi.getTimerCount()).toBe(0);
+  } finally { vi.useRealTimers(); }
 });

@@ -39,7 +39,8 @@ import {
 } from "./context-clip-prompt.ts";
 import { createSessionEventMapper } from "./map-events.ts";
 import { createAgentTools } from "../../agent-tools/index.ts";
-import { createReviewSettingsStore, installAutomaticReview } from "../../automatic-review/index.ts";
+import { installAutomaticReview } from "../../automatic-review/index.ts";
+import { createUtilitySettingsStore } from "../../utility-model/index.ts";
 import { wikilotPromptOptions } from "./system-prompt.ts";
 import {
   decodeWorkerCommand,
@@ -207,7 +208,7 @@ async function handleStart(
     settings: settingsManager,
     readSettings: async () => {
       await syncUserProviders(modelRuntime!, command.agentDir);
-      return createReviewSettingsStore(command.agentDir).read();
+      return createUtilitySettingsStore(command.agentDir).read();
     },
     trustedReadTools: agentTools.customTools,
     trustedReadExtensionPaths: agentTools.trustedReadExtensionPaths,

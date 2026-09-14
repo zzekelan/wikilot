@@ -1,3 +1,6 @@
+import { createVersionsModule } from "../versions";
+import type { VersionChange, VersionFileDiff, RestoreVersionResult, SaveVersionRequest, SaveVersionResult, VersionsSnapshot } from "../../shared/versions";
+import type { WorkspaceFileChange, WorkspaceFileReport } from "../../shared/workspace";
 import {
   normalizeStructuredPrompt,
   type StructuredPrompt,
@@ -5,7 +8,7 @@ import {
 import {
   type AppDefaults,
   type AppDefaultsUpdate,
-  type ReviewSettings,
+  type UtilitySettings,
   type AuthenticationCancelRequest,
   type AuthenticationRespondRequest,
   type AuthenticationStartRequest,
@@ -51,7 +54,7 @@ import {
   readTrustedProjectModelDefaults,
 } from "../models";
 import { createSessionModule, type SessionImageResult, type SessionModule } from "../session";
-import { createReviewSettingsStore } from "../automatic-review";
+import { createUtilitySettingsStore } from "../utility-model";
 import {
   recordAppDefaultsSave,
   recordCredentialSave,
@@ -134,6 +137,8 @@ export type WikilotApplication = {
     workspaceId: string,
     request: WorkspaceLinkResolveRequest,
   ): WorkspaceLinkResolution;
+  importWorkspaceFiles(workspaceId: string, destination: string, sourcePaths: string[], signal?: AbortSignal): Promise<WorkspaceFileReport>;
+  changeWorkspaceFiles(workspaceId: string, change: WorkspaceFileChange): Promise<WorkspaceFileReport>;
   createWorkspaceMarkdown(workspaceId: string, path: string): MarkdownDocumentSnapshot;
   getWorkspacePdfSource(sourceId: string): WorkspacePdfSource;
   /** Revoke a Browser PDF capability. Unknown ids are already released. */
@@ -167,8 +172,13 @@ export type WikilotApplication = {
   /** App Defaults for new Sessions, independent of existing Sessions. */
   getAppDefaults(): AppDefaults;
   updateAppDefaults(patch: AppDefaultsUpdate): AppDefaults;
-  getReviewSettings(): ReviewSettings;
-  updateReviewSettings(settings: ReviewSettings): ReviewSettings;
+  restoreVersion(workspaceId: string, versionId: string): Promise<RestoreVersionResult>;
+  getVersionChanges(workspaceId: string): Promise<VersionChange[]>;
+  getVersionFileDiff(workspaceId: string, path: string): Promise<VersionFileDiff>;
+  getVersions(workspaceId: string, offset?: number): Promise<VersionsSnapshot>;
+  saveVersion(workspaceId: string, request: SaveVersionRequest): Promise<SaveVersionResult>;
+  getUtilitySettings(): UtilitySettings;
+  updateUtilitySettings(settings: unknown): UtilitySettings;
   prompt(prompt: StructuredPrompt): Promise<void>;
   abort(workspaceId: string, sessionId: string): Promise<void>;
   getSessionConfiguration(
@@ -219,7 +229,23 @@ export function createWikilotApplication(
   const projectTrust = options.projectTrust ?? createProjectTrustService(agentDir);
   const modelServices = createModelServices({ agentDir: options.agentDir });
   const defaultsStore = createAppDefaultsStore({ agentDir: options.agentDir });
-  const reviewSettings = createReviewSettingsStore(agentDir);
+  const utilitySettings = createUtilitySettingsStore(agentDir);
+  const versions = createVersionsModule({
+    onChange: workspaceId => emitEvent({ type: "workspace_versions_changed", workspaceId }),
+    resolveWorkspace: (workspaceId) => workspace.resolve(workspaceId),
+    async getModelContext(workspaceId, sessionId) {
+      const settings = utilitySettings.read();
+      let session;
+      if (!settings.model && sessionId !== undefined) {
+        const { configuration } = await sessions.getConfiguration(workspaceId, sessionId);
+        if (!configuration.provider || !configuration.model) throw new Error("Select a Session Model before saving a version.");
+        session = { provider: configuration.provider, model: configuration.model,
+          thinkingLevel: configuration.thinkingLevel ?? "off" as const };
+      }
+      return { runtime: await modelServices.getModelRuntime(), settings, session,
+        defaults: sessionId === undefined ? defaultsStore.read().sessionModel : undefined };
+    },
+  });
   const pendingProjectTrust = new Map<string, ProjectTrustRequest>();
   let sessions: SessionModule;
   const workspace = createWorkspaceModule({
@@ -286,8 +312,9 @@ export function createWikilotApplication(
       return workspace.listKnown();
     },
 
-    removeKnownWorkspace(workspaceId) {
-      return workspace.removeKnown(workspaceId);
+    async removeKnownWorkspace(workspaceId) {
+      await workspace.removeKnown(workspaceId);
+      await versions.forget(workspaceId);
     },
 
     async listSessions(workspaceId) {
@@ -374,6 +401,14 @@ export function createWikilotApplication(
 
     resolveWorkspaceLink(workspaceId, request) {
       return workspace.resolveLink(workspaceId, request);
+    },
+
+    importWorkspaceFiles(workspaceId, destination, sourcePaths, signal) {
+      return workspace.importFiles(workspaceId, destination, sourcePaths, signal);
+    },
+
+    changeWorkspaceFiles(workspaceId, change) {
+      return workspace.changeFiles(workspaceId, change);
     },
 
     createWorkspaceMarkdown(workspaceId, path) {
@@ -463,8 +498,16 @@ export function createWikilotApplication(
       return authentication.cancel(request.sessionId);
     },
 
-    getReviewSettings: reviewSettings.read,
-    updateReviewSettings: reviewSettings.update,
+    getVersionChanges: versions.changes,
+    getVersionFileDiff: versions.fileDiff,
+    getVersions: versions.status,
+    saveVersion: versions.save,
+    async restoreVersion(workspaceId, versionId) {
+      if (await sessions.hasActiveTurn(workspaceId)) throw new Error("Wait for the running Session to finish before restoring.");
+      return versions.restore(workspaceId, versionId);
+    },
+    getUtilitySettings: utilitySettings.read,
+    updateUtilitySettings: utilitySettings.update,
 
     getAppDefaults() {
       return defaultsStore.read();
@@ -541,6 +584,7 @@ export function createWikilotApplication(
     },
 
     async shutdown() {
+      await versions.shutdown();
       await workspace.shutdown();
       await sessions.shutdown();
     },

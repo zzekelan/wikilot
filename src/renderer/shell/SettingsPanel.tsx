@@ -11,7 +11,7 @@ import { useFocusReturn, useFocusTrap } from "./overlay";
 import "./SettingsPanel.css";
 import { ProviderSettingsSection } from "./ProviderSettingsSection";
 import { useTheme } from "./theme";
-import { ReviewModelSetting } from "./ReviewModelSetting";
+import { UtilityModelSetting } from "./UtilityModelSetting";
 
 type SettingsPanelProps = {
   open: boolean;
@@ -19,17 +19,18 @@ type SettingsPanelProps = {
   initialSection?: SettingsSection;
 };
 
-export type SettingsSection = "general" | "providers";
+export type SettingsSection = "general" | "utility-model" | "providers";
 
 const SECTIONS: Array<{
   id: SettingsSection;
   label: string;
 }> = [
   { id: "general", label: "General" },
+  { id: "utility-model", label: "Utility Model" },
   { id: "providers", label: "Providers" },
 ];
 
-/** Application appearance, Automatic Review, new-Session defaults, and Providers. */
+/** Application appearance, Utility Model, new-Session defaults, and Providers. */
 export function SettingsPanel({
   open,
   onClose,
@@ -165,10 +166,10 @@ export function SettingsPanel({
         </nav>
         <div className="settings-content">
           {section === "general" ? (
-            <section aria-label="General settings" className="settings-general-section">
-              <div className="settings-general-inner">
+            <section aria-label="General settings" className="settings-preferences-section">
+              <div className="settings-preferences-inner">
                 <h3 className="settings-section-title">General</h3>
-                <p className="settings-hint">Appearance, Automatic Review and defaults for new Sessions.</p>
+                <p className="settings-hint">Appearance and defaults for new Sessions.</p>
                 <div className="settings-preference-row">
                   <div>
                     <span className="settings-preference-label" id="settings-theme-label">Theme</span>
@@ -222,8 +223,16 @@ export function SettingsPanel({
                     disabled={busy || defaultsLoading}
                   />
                 </div>
-                {open ? <ReviewModelSetting /> : null}
                 <p className="settings-save-hint" role="status">{busy ? "Saving…" : "Preferences save automatically."}</p>
+              </div>
+            </section>
+          ) : section === "utility-model" ? (
+            <section aria-label="Utility Model settings" className="settings-preferences-section">
+              <div className="settings-preferences-inner">
+                <h3 className="settings-section-title">Utility Model</h3>
+                <p className="settings-hint">Model and Thinking Level for Automatic Review and version messages.</p>
+                {open ? <UtilityModelSetting /> : null}
+                <p className="settings-save-hint">Preferences save automatically.</p>
               </div>
             </section>
           ) : (

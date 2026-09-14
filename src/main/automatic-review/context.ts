@@ -1,5 +1,5 @@
 import type { SessionEntry } from "@earendil-works/pi-coding-agent";
-import { PROMPT_ENTRY_TYPE, readPromptRecord } from "../../shared/session/prompt.ts";
+import { PROMPT_ENTRY_TYPE, readPromptRecord } from "../../shared/session/index.ts";
 
 // Pi's context estimator uses characters / 4. Apply the same estimated-token
 // budget independently to each tool result, including the omission marker.

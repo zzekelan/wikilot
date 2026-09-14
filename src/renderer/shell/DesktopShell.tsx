@@ -545,6 +545,7 @@ export function DesktopShell() {
           }
           return;
         }
+        if ("type" in event && event.type === "workspace_versions_changed") return;
         // Keep the Known Workspace switcher's running-work badge live:
         // status transitions from any Workspace refresh the list.
         if (event.delta.type === "session_status") {
@@ -1095,13 +1096,14 @@ export function DesktopShell() {
     handlePaneTabsChange(openWorkspaceGraphTab(workspaceTabs));
   }
 
-  const onOpenFile = useCallback((path: string) => {
+  const onOpenFile = useCallback((path: string, fromFileTree = false) => {
     if (!/\.(md|pdf)$/i.test(path)) {
       setUnsupportedFile(path);
       return;
     }
+    const reopened = fromFileTree && paneSaveControllerRef.current?.reopenPath(path);
     setWorkspaceTabs((current) => {
-      const next = openWorkspacePaneTab(current, path);
+      const next = openWorkspacePaneTab(reopened ? closeWorkspacePaneTab(current, path) : current, path);
       schedulePanePersist(next);
       return next;
     });
@@ -1461,6 +1463,7 @@ export function DesktopShell() {
         onSwitchWorkspace={onSwitchWorkspace}
         onRequestRemoveWorkspace={onRequestRemoveWorkspace}
         onCreateSession={() => void onCreateSession()}
+        beforeSaveVersion={async () => paneSaveControllerRef.current?.flushAll() ?? true}
         graphActive={workspaceTabs.activePath === WORKSPACE_GRAPH_TAB_ID}
         graphStatus={workspaceGraphStatus}
         onOpenGraph={onOpenGraph}
@@ -1473,7 +1476,16 @@ export function DesktopShell() {
         leftMode={leftMode}
         onLeftModeChange={onLeftModeChange}
         activePath={workspaceTabs.activePath}
-        onOpenFile={onOpenFile}
+        onTrashFiles={async paths => paneSaveControllerRef.current && workspace
+          ? paneSaveControllerRef.current.runFileChange(paths, () => client.changeWorkspaceFiles(workspace.id, { kind: "trash", paths }))
+          : { status: "blocked", reason: "unconfirmed", paths }}
+        onMoveFiles={async (paths, destination) => paneSaveControllerRef.current && workspace
+          ? paneSaveControllerRef.current.runFileChange(paths, () => client.changeWorkspaceFiles(workspace.id, { kind: "move", paths, destination }))
+          : { status: "blocked", reason: "save-failed", paths }}
+        onRenameFile={async (path, name) => paneSaveControllerRef.current && workspace
+          ? paneSaveControllerRef.current.runFileChange([path], () => client.changeWorkspaceFiles(workspace.id, { kind: "rename", path, name }))
+          : { status: "blocked", reason: "save-failed", paths: [path] }}
+        onOpenFile={path => onOpenFile(path, true)}
       />
       {sidebarOpen && !compactLayout && !activePaneIsWide ? (
         <ColumnResizer

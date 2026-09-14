@@ -182,18 +182,134 @@
   font-family: var(--font-mono);
 }
 
-/* Custom select: native chrome replaced with a chevron in the muted text
-   tone (per-theme, since background images can't currentColor). */
-.settings-select {
-  padding-right: var(--space-6);
-  cursor: pointer;
-  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="%235d574a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>');
-  background-repeat: no-repeat;
-  background-position: right var(--space-3) center;
+/* Chromium's customizable select keeps native selection, keyboard navigation,
+   typeahead and top-layer positioning while theming the whole picker. */
+.settings-select,
+.settings-select::picker(select) {
+  appearance: base-select;
 }
 
-:root.dark .settings-select {
-  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="%23a39b8b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>');
+.settings-select {
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-3);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease-out, border-color 0.15s ease-out;
+}
+
+.settings-select:hover:not(:disabled),
+.settings-select:open {
+  background: var(--color-surface-hover);
+  border-color: var(--color-muted);
+}
+
+.settings-select:open {
+  outline: none;
+  box-shadow: none;
+}
+
+.settings-select:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.settings-select::picker-icon {
+  content: "";
+  flex-shrink: 0;
+  width: 0.75rem;
+  height: 0.75rem;
+  margin-left: auto;
+  background: var(--color-muted);
+  mask: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>') center / contain no-repeat;
+  transition: rotate 0.15s ease-out;
+}
+
+.settings-select:open::picker-icon {
+  rotate: 180deg;
+}
+
+.settings-select::picker(select) {
+  position-try-order: normal;
+  max-width: calc(100vw - 2 * var(--space-2));
+  max-height: min(var(--overlay-menu-max-h), 60dvh);
+  overflow: auto;
+  margin-block: var(--space-1);
+  padding: var(--space-1);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-paper);
+  color: var(--color-ink);
+  box-shadow: var(--shadow-floating);
+  font: inherit;
+  opacity: 1;
+  transition: opacity 0.12s ease-out;
+}
+
+@starting-style {
+  .settings-select::picker(select) { opacity: 0; }
+}
+
+.settings-select option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--space-8);
+  padding: var(--space-2);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-ink);
+  font-size: var(--text-md);
+  font-weight: 400;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+  transition: background 0.12s ease-out;
+}
+
+.settings-select option:hover,
+.settings-select option:focus {
+  outline: none;
+  background: var(--color-surface);
+}
+
+.settings-select option:focus-visible {
+  box-shadow: var(--focus-ring-inset);
+}
+
+.settings-select option:checked {
+  color: var(--color-highlight-text);
+}
+
+.settings-select option::checkmark {
+  order: 1;
+  flex-shrink: 0;
+  margin-left: auto;
+  color: var(--color-highlight-text);
+}
+
+.settings-select option:disabled {
+  color: var(--color-muted);
+  cursor: not-allowed;
+}
+
+.settings-select optgroup {
+  padding-block: var(--space-1);
+  color: var(--color-muted);
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+
+.settings-select optgroup + optgroup {
+  border-top: 1px solid var(--color-border);
+  margin-top: var(--space-1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settings-select,
+  .settings-select::picker-icon,
+  .settings-select::picker(select),
+  .settings-select option { transition: none; }
 }
 
 /* Custom checkbox: ink-filled check on paper, themed via mask so the glyph

@@ -202,18 +202,27 @@
   white-space: pre-wrap;
 }
 
+.msg-user-command {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-2);
+}
+
 .prompt-command-badge {
   display: inline-flex;
-  align-items: center;
+  align-items: baseline;
   gap: var(--space-2);
-  padding-block: var(--space-2);
   color: var(--color-highlight);
   font-size: var(--text-lg);
   font-weight: 500;
   line-height: 1.6;
 }
 
-.prompt-command-badge svg { flex-shrink: 0; }
+.prompt-command-badge svg {
+  flex-shrink: 0;
+  align-self: center;
+}
 
 .timeline-clips { margin-bottom: var(--space-1); }
 

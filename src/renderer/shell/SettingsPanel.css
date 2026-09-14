@@ -122,8 +122,8 @@
   font-weight: 600;
 }
 
-.settings-general-section { flex: 1; min-height: 0; overflow-y: auto; }
-.settings-general-inner { padding: var(--space-6); }
+.settings-preferences-section { flex: 1; min-height: 0; overflow-y: auto; }
+.settings-preferences-inner { padding: var(--space-6); }
 
 .settings-preference-row {
   display: flex;
@@ -133,7 +133,7 @@
   padding: var(--space-5) 0;
   border-bottom: 1px solid var(--color-border);
 }
-.settings-general-inner > .settings-hint { margin-top: var(--space-1); margin-bottom: var(--space-2); font-size: var(--text-sm); }
+.settings-preferences-inner > .settings-hint { margin-top: var(--space-1); margin-bottom: var(--space-2); font-size: var(--text-sm); }
 .settings-preference-label { color: var(--color-ink); font-size: var(--text-md); font-weight: 500; }
 .settings-preference-row .settings-hint { max-width: 25rem; margin-top: var(--space-1); }
 .settings-save-hint { margin: var(--space-4) 0 0; font-size: var(--text-sm); color: var(--color-faint); }
@@ -389,14 +389,14 @@
 .settings-model-advanced summary:focus-visible,
 .settings-provider-model-disclosure summary:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 
-.settings-review-model select { width: 14rem; max-width: 100%; flex-shrink: 0; }
-.settings-review-model .settings-error { margin-inline: 0; }
+.settings-utility-model select { width: 14rem; max-width: 100%; flex-shrink: 0; }
+.settings-utility-model .settings-error { margin-inline: 0; }
 
 @media (max-width: 42rem) {
   .settings-body { display: flex; flex-direction: column; }
   .settings-nav { flex-direction: row; padding: var(--space-2) var(--space-4); border-right: 0; border-bottom: 1px solid var(--color-border); }
   .settings-nav-item { padding: var(--space-2) var(--space-3); }
-  .settings-general-inner { padding: var(--space-5); }
+  .settings-preferences-inner { padding: var(--space-5); }
   .settings-page-header { padding: var(--space-5); }
   .settings-provider-directory { padding: 0 var(--space-5) var(--space-5); }
   .settings-provider-detail-col { padding: 0 var(--space-5) var(--space-5); }

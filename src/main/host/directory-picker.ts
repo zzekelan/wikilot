@@ -43,10 +43,40 @@ function normalizePickedPath(stdout: string): string {
  * directly (never through a shell), runs without any timeout so the dialog is
  * user-paced, and kills the child when the caller cancels.
  */
-export function createMacOsDirectoryPicker(options?: {
-  platform?: NodeJS.Platform;
-  spawnProcess?: DirectoryPickerSpawn;
-}): DirectoryPicker {
+type PickerOptions = { platform?: NodeJS.Platform; spawnProcess?: DirectoryPickerSpawn };
+
+export type ImportPicker = (options: { kind: "file" | "directory"; signal: AbortSignal }) => Promise<string[] | null>;
+
+export function createMacOsDirectoryPicker(options?: PickerOptions): DirectoryPicker {
+  const pick = createMacOsChooser(CHOOSE_FOLDER_SCRIPT, "directory chooser", options);
+  return async request => {
+    const result = await pick(request);
+    return result === null ? null : normalizePickedPath(result);
+  };
+}
+
+export function createMacOsImportPicker(options?: PickerOptions): ImportPicker {
+  return async ({ kind, signal }) => {
+    const selection = kind === "file"
+      ? 'choose file with prompt "Choose files to import" with multiple selections allowed'
+      : 'choose folder with prompt "Choose a folder to import"';
+    // NUL separates paths unambiguously, including names containing commas or newlines.
+    const script = `set picked to (${selection}) as list
+set paths to {}
+repeat with itemPath in picked
+  set end of paths to POSIX path of itemPath
+end repeat
+set AppleScript's text item delimiters to character id 0
+return paths as text`;
+    const result = await createMacOsChooser(script, "import chooser", options)({ signal });
+    if (result === null) return null;
+    const paths = result.replace(/\r?\n$/, "").split("\0");
+    if (paths.some(path => !path.startsWith("/"))) throw new Error("The system chooser returned an invalid selection. Try again.");
+    return paths.map(path => path.length > 1 && path.endsWith("/") ? path.slice(0, -1) : path);
+  };
+}
+
+function createMacOsChooser(script: string, label: string, options?: PickerOptions): DirectoryPicker {
   const platform = options?.platform ?? process.platform;
   const spawnProcess: DirectoryPickerSpawn =
     options?.spawnProcess ??
@@ -60,12 +90,12 @@ export function createMacOsDirectoryPicker(options?: {
       if (platform !== "darwin") {
         reject(
           new Error(
-            "The native directory chooser is only available on macOS.",
+            `The native ${label} is only available on macOS.`,
           ),
         );
         return;
       }
-      const child = spawnProcess("osascript", ["-e", CHOOSE_FOLDER_SCRIPT], {
+      const child = spawnProcess("osascript", ["-e", script], {
         stdio: ["ignore", "pipe", "pipe"],
       });
       let escalation: ReturnType<typeof setTimeout> | undefined;
@@ -91,7 +121,7 @@ export function createMacOsDirectoryPicker(options?: {
         clearTimeout(escalation);
         reject(
           new Error(
-            `Could not launch the macOS directory chooser: ${error.message}`,
+            `Could not launch the macOS ${label}: ${error.message}`,
           ),
         );
       });
@@ -103,7 +133,7 @@ export function createMacOsDirectoryPicker(options?: {
           return;
         }
         if (code === 0) {
-          resolve(normalizePickedPath(stdout));
+          resolve(stdout);
           return;
         }
         // AppleScript cancellation uses -128 regardless of the system language.
@@ -113,9 +143,9 @@ export function createMacOsDirectoryPicker(options?: {
         }
         reject(
           new Error(
-            `The macOS directory chooser failed: ${
+            `The macOS ${label} failed: ${
               stderr.trim() || `osascript exited with code ${code}`
-            }. Try opening the folder chooser again.`,
+            }. Try opening the chooser again.`,
           ),
         );
       });

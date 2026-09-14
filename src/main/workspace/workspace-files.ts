@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { lstatSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { renameSync, lstatSync, mkdirSync, writeFileSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { open, rename, rm, stat } from "node:fs/promises";
 import { basename, dirname, extname, join, relative, sep } from "node:path";
 import type {
@@ -7,6 +7,8 @@ import type {
   MarkdownDocumentSaveResult,
   MarkdownDocumentSnapshot,
   WorkspaceFileEntry,
+  WorkspaceFileChange,
+  WorkspaceFileReport,
   WorkspaceFileListResponse,
 } from "../../shared/workspace";
 import {
@@ -227,4 +229,155 @@ export async function saveMarkdownDocument(
     throw new Error("Markdown document could not be read after saving");
   }
   return { outcome: "saved", snapshot };
+}
+
+const INVALID_NAME_MESSAGE = "Enter a valid single filename without path separators or control characters.";
+function validEntryName(name: unknown): name is string {
+  return typeof name === "string" && Boolean(name) && name !== "." && name !== ".." && !/[/\\\u0000-\u001f\u007f-\u009f]/.test(name);
+}
+
+/** Exclusive creation shared by the File Tree and missing Markdown links. */
+export function createWorkspaceEntry(cwd: string, change: Extract<WorkspaceFileChange, { kind: "create" }>): WorkspaceFileReport {
+  const fail = (code: WorkspaceFileReport["failures"][number]["code"], message: string): WorkspaceFileReport => ({ created: [], relocated: [], failures: [{ code, message }] });
+  if (!change || change.kind !== "create" || typeof change.parent !== "string" ||
+      typeof change.name !== "string" || !["file", "directory"].includes(change.entryKind)) {
+    return fail("invalid-path", "Invalid create operation.");
+  }
+  const { name } = change;
+  if (!validEntryName(name)) {
+    return fail("invalid-path", INVALID_NAME_MESSAGE);
+  }
+  let parent: ReturnType<typeof resolveWorkspacePath>;
+  try {
+    const path = normalizeWorkspacePath(change.parent);
+    if (isExcludedWorkspacePath(path ? `${path}/${name}` : name)) {
+      return fail("invalid-path", "This path is excluded from Workspace browsing.");
+    }
+    parent = resolveWorkspacePath(cwd, path);
+    if (!statSync(parent.absolute).isDirectory()) return fail("unavailable", "The parent is not a directory.");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    return /not found|ENOENT|ENOTDIR/.test(message)
+      ? fail("unavailable", "The parent directory is unavailable.")
+      : fail("invalid-path", "The path must stay inside the Workspace and cannot traverse a symlink or excluded directory.");
+  }
+  const path = parent.path ? `${parent.path}/${name}` : name;
+  try {
+    const absolute = join(parent.absolute, name);
+    if (change.entryKind === "directory") mkdirSync(absolute);
+    else writeFileSync(absolute, "", { flag: "wx" });
+    return { created: [path], relocated: [], failures: [] };
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === "EEXIST") return fail("exists", "An entry with this name already exists.");
+    if (code === "ENOENT" || code === "ENOTDIR") return fail("unavailable", "The parent directory is unavailable.");
+    return fail("io-error", "Could not create the entry. Check directory permissions and available disk space.");
+  }
+}
+
+/** Validate both paths before changing a name; own writes are serialized by WorkspaceModule. */
+export function renameWorkspaceEntry(cwd: string, change: Extract<WorkspaceFileChange, { kind: "rename" }>): WorkspaceFileReport {
+  const fail = (code: WorkspaceFileReport["failures"][number]["code"], message: string): WorkspaceFileReport => ({ created: [], relocated: [], failures: [{ code, message }] });
+  if (typeof change.path !== "string" || !validEntryName(change.name)) {
+    return fail("invalid-path", INVALID_NAME_MESSAGE);
+  }
+  let source: ReturnType<typeof resolveWorkspacePath>;
+  try {
+    source = resolveWorkspacePath(cwd, change.path);
+    if (!source.path) return fail("invalid-path", "The Workspace root cannot be renamed.");
+    if (isExcludedWorkspacePath(change.name)) return fail("invalid-path", "This name is excluded from Workspace browsing.");
+  } catch (error) {
+    return /not found|ENOENT|ENOTDIR/.test(String(error))
+      ? fail("unavailable", "The entry is unavailable.")
+      : fail("invalid-path", "The path must stay inside the Workspace and cannot traverse a symlink or excluded directory.");
+  }
+  if (basename(source.path) === change.name) return { created: [], relocated: [], failures: [] };
+  const destination = join(dirname(source.absolute), change.name);
+  try {
+    if (lstatSync(destination, { throwIfNoEntry: false })) return fail("exists", "An entry with this name already exists.");
+    renameSync(source.absolute, destination);
+    return { created: [], relocated: [{ from: source.path, to: toPosixRelative(source.root, destination) }], failures: [] };
+  } catch {
+    return fail("io-error", "Could not rename the entry. Check its availability and directory permissions.");
+  }
+}
+
+/** A validated destination gates the batch; individual failures never roll back successes. */
+export function moveWorkspaceEntries(cwd: string, change: Extract<WorkspaceFileChange, { kind: "move" }>): WorkspaceFileReport {
+  const report: WorkspaceFileReport = { created: [], relocated: [], failures: [] };
+  const fail = (source: string, code: WorkspaceFileReport["failures"][number]["code"], message: string) => {
+    report.failures.push({ source, code, message });
+  };
+  if (!Array.isArray(change.paths) || !change.paths.every(path => typeof path === "string") || typeof change.destination !== "string") {
+    fail("", "invalid-path", "Invalid move operation.");
+    return report;
+  }
+  let destination: ReturnType<typeof resolveWorkspacePath>;
+  try {
+    destination = resolveWorkspacePath(cwd, change.destination);
+    if (!statSync(destination.absolute).isDirectory()) throw new Error("Not a directory");
+  } catch {
+    fail(change.destination, "invalid-path", "The destination must be an available directory inside the Workspace, without symlinks or excluded paths.");
+    return report;
+  }
+  const paths: string[] = [];
+  for (const input of change.paths) {
+    try {
+      const path = normalizeWorkspacePath(input);
+      if (!path || isExcludedWorkspacePath(path)) throw new Error("Invalid source");
+      if (!paths.includes(path)) paths.push(path);
+    } catch { fail(input, "invalid-path", "The source must be an entry inside the Workspace."); }
+  }
+  for (const path of paths.filter(path => !paths.some(parent => path.startsWith(`${parent}/`)))) {
+    try {
+      const source = resolveWorkspacePath(cwd, path);
+      if (destination.path === path || destination.path.startsWith(`${path}/`)) {
+        fail(path, "invalid-path", "A folder cannot move into itself or its descendants.");
+        continue;
+      }
+      const to = destination.path ? `${destination.path}/${basename(path)}` : basename(path);
+      if (to === path) continue;
+      const absolute = join(destination.absolute, basename(path));
+      if (lstatSync(absolute, { throwIfNoEntry: false })) {
+        fail(path, "exists", "An entry with this name already exists.");
+        continue;
+      }
+      renameSync(source.absolute, absolute);
+      report.relocated.push({ from: path, to });
+    } catch (error) {
+      const message = String(error);
+      fail(path, /not found|ENOENT|ENOTDIR/.test(message) ? "unavailable" : /symlink|excluded|escapes/.test(message) ? "invalid-path" : "io-error",
+        "Could not move the entry. Check its availability, path and directory permissions.");
+    }
+  }
+  return report;
+}
+
+
+/** Resolve Workspace identities before invoking the system trash adapter; never permanently delete. */
+export async function trashWorkspaceEntries(cwd: string, change: Extract<WorkspaceFileChange, { kind: "trash" }>,
+  trashEntry: (absolutePath: string) => Promise<void>): Promise<WorkspaceFileReport> {
+  const report: WorkspaceFileReport = { created: [], relocated: [], trashed: [], failures: [] };
+  if (!Array.isArray(change.paths) || !change.paths.length || !change.paths.every(path => typeof path === "string")) {
+    report.failures.push({ code: "invalid-path", message: "Select files or folders to move to Trash." });
+    return report;
+  }
+  const paths: string[] = [];
+  for (const input of change.paths) {
+    try {
+      const path = normalizeWorkspacePath(input);
+      if (!path || isExcludedWorkspacePath(path)) throw new Error("Invalid path");
+      if (!paths.includes(path)) paths.push(path);
+    } catch { report.failures.push({ source: input, code: "invalid-path", message: "Only entries inside the Workspace can be moved to Trash." }); }
+  }
+  for (const path of paths.filter(path => !paths.some(parent => path.startsWith(`${parent}/`)))) {
+    try {
+      const source = resolveWorkspacePath(cwd, path);
+      await trashEntry(source.absolute);
+      report.trashed!.push(path);
+    } catch {
+      report.failures.push({ source: path, code: "io-error", message: "Could not move this item to Trash. Check its availability, path and permissions." });
+    }
+  }
+  return report;
 }

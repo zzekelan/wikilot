@@ -9,10 +9,10 @@ afterEach(() => {
 });
 
 describe("Timeline Context Clip summary", () => {
-  it("renders a Prompt command as an icon and title without a text bubble", () => {
-    render(<MessageView item={{ kind: "user", text: "/init", command: "init", at: 1 }} sessionBusy={false} isLast />);
+  it("renders a Prompt command and additional text together inside a bubble", () => {
+    render(<MessageView item={{ kind: "user", text: "/init Use Chinese", command: "init", at: 1 }} sessionBusy={false} isLast />);
     expect(screen.getByTestId("prompt-command-badge").textContent).toBe("Initialize Workspace");
-    expect(screen.getByTestId("timeline-user").querySelector(".msg-user-bubble")).toBeNull();
+    expect(screen.getByTestId("prompt-command-badge").closest(".msg-user-bubble")?.textContent).toBe("Initialize WorkspaceUse Chinese");
     expect(screen.queryByRole("button", { name: "Copy message" })).toBeNull();
   });
 

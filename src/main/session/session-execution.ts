@@ -757,9 +757,14 @@ export function createSessionExecution(
       if (selectingModel && patch.thinkingLevel === undefined) {
         throw new Error("Session Model and Effort must be chosen together");
       }
-      const hasExecutablePair = Boolean(
-        next.provider && next.model && next.thinkingLevel,
-      );
+      const baseConfig: WorkerSessionConfig = {
+        thinkingLevel: next.thinkingLevel ?? "off",
+        wikiPromptEnabled: next.wikiPromptEnabled ?? DEFAULT_APP_DEFAULTS.wikiPromptEnabled,
+        accessMode: next.accessMode ?? "auto-review",
+      };
+      const executable: ExecutableWorkerSessionConfig | undefined = next.provider && next.model
+        ? { ...baseConfig, provider: next.provider, model: next.model }
+        : undefined;
       if (
         next.provider &&
         next.model &&
@@ -779,72 +784,35 @@ export function createSessionExecution(
         status === "starting" ||
         status === "stopping" ||
         applyingConfigurations.has(key);
-      if (configurationTransitioning && hasExecutablePair) {
-        const pending: ExecutableWorkerSessionConfig = {
-          provider: next.provider!,
-          model: next.model!,
-          thinkingLevel: next.thinkingLevel!,
-          wikiPromptEnabled:
-            next.wikiPromptEnabled ?? DEFAULT_APP_DEFAULTS.wikiPromptEnabled,
-          accessMode: next.accessMode ?? "auto-review",
-        };
-        pendingConfigurations.set(key, pending);
-        if (confirmedModelSelection) saveSessionModelDefault(pending);
+      if (configurationTransitioning) {
+        if (!executable) {
+          throw new Error("Choose a Model in the Composer before sending");
+        }
+        pendingConfigurations.set(key, executable);
+        if (confirmedModelSelection) saveSessionModelDefault(executable);
         if (applyingConfigurations.has(key)) {
           const worker = registry.get(key);
           if (worker) {
             void applyPendingConfiguration(key, worker).catch(() => {});
           }
         }
-        return { status: "pending", configuration: pending };
-      }
-
-      if (
-        configurationTransitioning &&
-        !hasExecutablePair
-      ) {
-        throw new Error("Choose a Model in the Composer before sending");
+        return { status: "pending", configuration: executable };
       }
 
       const worker = registry.get(key);
       if (worker) {
-        if (!next.provider || !next.model) {
+        if (!executable) {
           throw new Error("Choose a Model in the Composer before sending");
         }
-        const applied: ExecutableWorkerSessionConfig = {
-          provider: next.provider,
-          model: next.model,
-          thinkingLevel: next.thinkingLevel!,
-          wikiPromptEnabled:
-            next.wikiPromptEnabled ?? DEFAULT_APP_DEFAULTS.wikiPromptEnabled,
-          accessMode: next.accessMode ?? "auto-review",
-        };
-        pendingConfigurations.set(key, applied);
+        pendingConfigurations.set(key, executable);
         await applyPendingConfiguration(key, worker);
-        if (confirmedModelSelection) saveSessionModelDefault(applied);
-        return { status: "applied", configuration: applied };
+        if (confirmedModelSelection) saveSessionModelDefault(executable);
+        return { status: "applied", configuration: executable };
       }
 
       await persistConfiguration(session, next);
-      if (next.provider && next.model) {
-        const applied: ExecutableWorkerSessionConfig = {
-          provider: next.provider,
-          model: next.model,
-          thinkingLevel: next.thinkingLevel!,
-          wikiPromptEnabled:
-            next.wikiPromptEnabled ?? DEFAULT_APP_DEFAULTS.wikiPromptEnabled,
-          accessMode: next.accessMode ?? "auto-review",
-        };
-        configurations.set(key, applied);
-        if (confirmedModelSelection) saveSessionModelDefault(applied);
-      } else {
-        configurations.set(key, {
-          thinkingLevel: next.thinkingLevel ?? "off",
-          wikiPromptEnabled:
-            next.wikiPromptEnabled ?? DEFAULT_APP_DEFAULTS.wikiPromptEnabled,
-          accessMode: next.accessMode ?? "auto-review",
-        });
-      }
+      configurations.set(key, executable ?? baseConfig);
+      if (executable && confirmedModelSelection) saveSessionModelDefault(executable);
       return { status: "applied", configuration: next };
     },
 

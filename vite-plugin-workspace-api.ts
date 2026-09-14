@@ -4,6 +4,7 @@ import {
   createBrowserHostMiddleware,
   createMacOsDirectoryPicker,
   type DirectoryPicker,
+  type ImportPicker,
 } from "./src/main/host";
 import {
   initHostTelemetry,
@@ -28,7 +29,13 @@ function mountApis(middlewares: Connect.Server): () => Promise<void> {
   initHostTelemetry();
   const app = createWikilotApplication();
   middlewares.use(
-    createBrowserHostMiddleware(app, { pickDirectory: createDirectoryPicker() }),
+    createBrowserHostMiddleware(app, {
+      pickDirectory: createDirectoryPicker(),
+      // Isolated acceptance substitutes only the native selection, never the import operation.
+      pickImport: process.env.WIKILOT_PICK_IMPORT_RESULT
+        ? async ({ kind }) => (JSON.parse(process.env.WIKILOT_PICK_IMPORT_RESULT!) as Record<"file" | "directory", Awaited<ReturnType<ImportPicker>>>)[kind]
+        : undefined,
+    }),
   );
   let shutdown: Promise<void> | undefined;
   return () => {

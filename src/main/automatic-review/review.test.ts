@@ -8,9 +8,11 @@ import { createAgentSession, DefaultResourceLoader, ModelRuntime, SessionManager
 import type { AssistantMessage, Context, ModelsSimpleStreamOptions } from "@earendil-works/pi-ai";
 import { Type } from "typebox";
 import type { AccessMode } from "../../shared/workspace";
-import { PROMPT_ENTRY_TYPE, createPromptRecord } from "../../shared/session/prompt";
-import { createReviewSettingsStore, installAutomaticReview } from "./index";
-import { constrainReviewOutput, reviewSchema } from "./structured-output";
+import { PROMPT_ENTRY_TYPE, createPromptRecord } from "../../shared/session";
+import { installAutomaticReview } from "./index";
+import { createUtilitySettingsStore } from "../utility-model";
+import { constrainJsonSchemaOutput } from "../models";
+import { reviewSchema } from "./structured-output";
 
 const cleanup: (() => void)[] = [];
 afterEach(() => { for (const dispose of cleanup.splice(0)) dispose(); });
@@ -34,7 +36,7 @@ async function setup(customTools: ToolDefinition[] = [], withWeb = false) {
   const { session } = await createAgentSession({ cwd: root, agentDir: root, model, modelRuntime: runtime,
     settingsManager: settings, resourceLoader, sessionManager: manager, customTools });
   cleanup.push(() => session.dispose());
-  const store = createReviewSettingsStore(root);
+  const store = createUtilitySettingsStore(root);
   const assistant = (content: AssistantMessage["content"]): AssistantMessage => ({ role: "assistant", content,
     api: model.api, provider: model.provider, model: model.id, usage, stopReason: "stop", timestamp: Date.now() });
   const complete = vi.fn(async (_model, _context: Context, options?: ModelsSimpleStreamOptions) => {
@@ -147,17 +149,17 @@ it.each(["not json", '{"outcome":"allow"}', '{"outcome":"allow","reason":"ok","e
 
 it("uses an independent selection, and never falls back when it is missing or corrupt", async () => {
   const test = await setup(); test.install(); test.prompt("do something");
-  test.store.update({ model: { provider: test.model.provider, model: test.model.id } });
+  test.store.update({ model: { provider: test.model.provider, model: test.model.id, thinkingLevel: "off" } });
   await test.call();
   expect(test.getModel).toHaveBeenCalledWith(test.model.provider, test.model.id);
   test.complete.mockClear();
-  test.store.update({ model: { provider: "missing", model: "missing" } });
+  test.store.update({ model: { provider: "missing", model: "missing", thinkingLevel: "off" } });
   expect(await test.call()).toMatchObject({ block: true, terminate: true });
-  writeFileSync(join(test.root, "review.json"), "broken");
+  writeFileSync(join(test.root, "utility-model.json"), "broken");
   expect(await test.call()).toMatchObject({ block: true, terminate: true });
   expect(test.complete).not.toHaveBeenCalled();
   test.store.update({ model: null });
-  expect(createReviewSettingsStore(test.root).read()).toEqual({ model: null });
+  expect(createUtilitySettingsStore(test.root).read()).toEqual({ model: null });
 });
 
 it("does not accept a late allow after cancellation", async () => {
@@ -214,7 +216,7 @@ it("keeps large pending arguments complete and blocks a context overflow", async
   const args = { path: "note.md", content: "document ".repeat(1000) };
   expect(await test.call("write", args)).toBeUndefined();
   expect(JSON.parse(test.complete.mock.calls[0][1].messages[0].content as string).action.arguments).toEqual(args);
-  test.store.update({ model: { provider: test.model.provider, model: test.model.id } });
+  test.store.update({ model: { provider: test.model.provider, model: test.model.id, thinkingLevel: "off" } });
   test.getModel.mockReturnValueOnce({ ...test.model, contextWindow: 100 });
   test.complete.mockClear();
   expect(await test.call()).toMatchObject({ block: true, reason: expect.stringContaining("context window") });
@@ -222,18 +224,18 @@ it("keeps large pending arguments complete and blocks a context overflow", async
 });
 
 it("sets native constraints for each supported protocol and rejects unknown ones", () => {
-  expect(constrainReviewOutput("openai-completions", {})).toHaveProperty("response_format.json_schema.strict", true);
-  expect(constrainReviewOutput("openai-codex-responses", {})).toHaveProperty("text.format.strict", true);
-  expect(constrainReviewOutput("anthropic-messages", { output_config: { effort: "high" } }))
+  expect(constrainJsonSchemaOutput("openai-completions", {}, { name: "automatic_review", schema: reviewSchema })).toHaveProperty("response_format.json_schema.strict", true);
+  expect(constrainJsonSchemaOutput("openai-codex-responses", {}, { name: "automatic_review", schema: reviewSchema })).toHaveProperty("text.format.strict", true);
+  expect(constrainJsonSchemaOutput("anthropic-messages", { output_config: { effort: "high" } }, { name: "automatic_review", schema: reviewSchema }))
     .toHaveProperty("output_config.format.schema", reviewSchema);
-  expect(constrainReviewOutput("google-generative-ai", {})).toHaveProperty("config.responseJsonSchema", reviewSchema);
-  expect(() => constrainReviewOutput("unknown-api", {})).toThrow("unsupported protocol");
+  expect(constrainJsonSchemaOutput("google-generative-ai", {}, { name: "automatic_review", schema: reviewSchema })).toHaveProperty("config.responseJsonSchema", reviewSchema);
+  expect(() => constrainJsonSchemaOutput("unknown-api", {}, { name: "automatic_review", schema: reviewSchema })).toThrow("unsupported protocol");
 });
 
 it("Full Access bypasses review configuration and inference, and switching back restores review", async () => {
   const test = await setup(); test.install(); test.prompt("write a document");
   test.setMode("full-access");
-  writeFileSync(join(test.root, "review.json"), "invalid settings");
+  writeFileSync(join(test.root, "utility-model.json"), "invalid settings");
   expect(await test.call()).toBeUndefined();
   expect(test.complete).not.toHaveBeenCalled();
   test.setMode("auto-review");
@@ -260,7 +262,7 @@ it("skips bundled web tools by source but reviews an SDK tool with the same name
 
 it("bypasses review for literal read-only Bash commands, including safe chains", async () => {
   const test = await setup(); test.settings.setShellCommandPrefix(undefined); test.install();
-  writeFileSync(join(test.root, "review.json"), "invalid review settings must not be consulted");
+  writeFileSync(join(test.root, "utility-model.json"), "invalid review settings must not be consulted");
   for (const command of [
     "pwd", "ls -lah src", "/bin/ls -l", "/usr/bin/wc -l file", "cat 'a b.md'", 'cat "a b.md"',
     "head -n 20 file", "tail -n10 file", "wc --lines file", "grep -n -e pattern file",

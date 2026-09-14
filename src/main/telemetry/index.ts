@@ -458,3 +458,18 @@ export async function shutdownHostTelemetry(): Promise<void> {
     await current.shutdown();
   }
 }
+
+/** Version persistence telemetry deliberately excludes messages, diffs, and file paths. */
+export function beginVersionOperation(workspaceId: string, mode: "automatic" | "manual" | "restore") {
+  const span = enabled ? tracer?.startSpan(mode === "restore" ? "workspace.version.restore" : "workspace.version.save") : undefined;
+  if (span) {
+    setAcceptanceRunId(span);
+    span.setAttribute("wikilot.workspace.id", privacySafeWorkspaceId(workspaceId));
+    span.setAttribute("wikilot.version.mode", mode);
+  }
+  return (outcome: "saved" | "restored" | "unchanged" | "error") => {
+    span?.setAttribute("wikilot.version.outcome", outcome);
+    span?.end();
+    requestFlush();
+  };
+}

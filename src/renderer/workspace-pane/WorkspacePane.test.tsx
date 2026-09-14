@@ -477,11 +477,11 @@ describe("WorkspacePane", () => {
     fake.openMarkdownDocument.mockResolvedValue({
       path: "a.md", status: "deleted", version: null, size: null,
     });
+    fake.saveMarkdownDocument.mockResolvedValue({ outcome: "conflict", snapshot: { path: "a.md", status: "deleted", version: null, size: null } });
     await act(async () => { fake.filesChanged?.(["a.md"]); });
 
-    expect(screen.getByText("File is not available")).toBeTruthy();
-    expect(screen.getByText("Unsaved")).toBeTruthy();
-    expect(screen.queryByText(/Notes draft/)).toBeNull();
+    expect(screen.getByText(/conflict.*draft.*preserved/i)).toBeTruthy();
+    expect(EditorView.findFromDOM(screen.getByRole("textbox"))?.state.doc.toString()).toBe("# Notes draft");
     fireEvent.click(screen.getByRole("button", { name: "Close a.md" }));
     await act(async () => {});
     expect(screen.getByRole("tab", { name: "a.md" })).toBeTruthy();
@@ -504,7 +504,7 @@ describe("WorkspacePane", () => {
     fireEvent.click(screen.getByRole("button", { name: "Close a.md" }));
     await act(async () => {});
 
-    expect(screen.getByText("Waiting for a stable disk read")).toBeTruthy();
+    expect(EditorView.findFromDOM(screen.getByRole("textbox"))?.state.doc.toString()).toBe("# Notes draft");
     expect(screen.getByText(/not ready for saving/i)).toBeTruthy();
     expect(screen.getByRole("tab", { name: "a.md" })).toBeTruthy();
     expect(onTabsChange).not.toHaveBeenCalledWith(expect.objectContaining({ tabs: [] }));
@@ -777,7 +777,112 @@ describe("WorkspacePane", () => {
     expect(screen.getByText("more")).toBeTruthy();
   });
 
-  it("adopts the latest disk content and reports an external replacement on conflict", async () => {
+  it.each(["conflict", "failed"] as const)("blocks a whole batch on an in-flight %s and retains the draft through watcher notifications", async outcome => {
+    let controller: import("./useWorkspaceDocuments").WorkspacePaneSaveController | null = null;
+    let settle!: (value: unknown) => void;
+    let reject!: (reason: Error) => void;
+    fake.saveMarkdownDocument.mockImplementation(() => new Promise((resolve, fail) => { settle = resolve; reject = fail; }));
+    renderControlled(openWorkspacePaneTab(initialWorkspacePaneState(), "a.md"), vi.fn(), { onSaveControllerChange: value => { controller = value; } });
+    await screen.findByText("Notes");
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    const editor = EditorView.findFromDOM(screen.getByRole("textbox"))!;
+    act(() => editor.dispatch({ changes: { from: editor.state.doc.length, insert: " draft" } }));
+    await waitFor(() => expect(fake.saveMarkdownDocument).toHaveBeenCalled());
+    const change = vi.fn();
+    let result!: Promise<unknown>;
+    act(() => { result = controller!.runFileChange(["a.md", "other.md", "folder"], change); });
+    fake.openMarkdownDocument.mockResolvedValue({ path: "a.md", status: "ready", content: "external", version: "v2", size: 8 });
+    await act(async () => {
+      fake.filesChanged?.(["a.md"]);
+      if (outcome === "conflict") settle({ outcome, snapshot: { path: "a.md", status: "ready", content: "external", version: "v2", size: 8 } });
+      else reject(new Error("disk full"));
+      expect(await result).toMatchObject({ status: "blocked", reason: outcome === "conflict" ? "conflict" : "save-failed" });
+    });
+    expect(change).not.toHaveBeenCalled();
+    expect(EditorView.findFromDOM(screen.getByRole("textbox"))?.state.doc.toString()).toBe("# Notes draft");
+  });
+
+  it.each(["rename", "trash"])("%s invalidates only successful batch descendants, releases PDF access, and keeps failed documents usable", async operation => {
+    let controller: import("./useWorkspaceDocuments").WorkspacePaneSaveController | null = null;
+    let tabs = openWorkspacePaneTab(initialWorkspacePaneState(), "folder/a.md");
+    tabs = openWorkspacePaneTab(tabs, "other.md");
+    tabs = openWorkspacePaneTab(tabs, "folder/paper.pdf");
+    renderControlled(tabs, vi.fn(), { onSaveControllerChange: value => { controller = value; } });
+    await screen.findByTestId("pdf-document");
+    await act(async () => {
+      expect(await controller!.runFileChange(["folder", "other.md"], async () => ({ created: [], relocated: operation === "rename" ? [{ from: "folder", to: "renamed" }] : [], trashed: operation === "trash" ? ["folder"] : undefined, failures: [{ source: "other.md", code: "exists", message: "exists" }] }))).toMatchObject({ status: "completed" });
+    });
+    expect(screen.getByText(operation === "trash" ? "File moved to Trash" : "File moved or renamed")).toBeTruthy();
+    await waitFor(() => expect(fake.releaseWorkspacePdfSource).toHaveBeenCalledWith("opaque"));
+    fake.openMarkdownDocument.mockClear();
+    fireEvent.click(screen.getByRole("tab", { name: "folder/a.md" }));
+    await act(async () => { fake.filesChanged?.(["folder/a.md", "folder/paper.pdf"]); await controller!.flushAll(); });
+    expect(screen.getByText(operation === "trash" ? "File moved to Trash" : "File moved or renamed")).toBeTruthy();
+    expect(fake.openMarkdownDocument).not.toHaveBeenCalled();
+    expect(fake.saveMarkdownDocument).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Close a.md" }));
+    expect(screen.queryByRole("tab", { name: "folder/a.md" })).toBeNull();
+    fireEvent.click(screen.getByRole("tab", { name: "other.md" }));
+    await screen.findByText("Notes");
+    expect(fake.openMarkdownDocument).toHaveBeenCalledWith("w", "other.md");
+  });
+
+  it("saves dirty descendants, permits subsequent parent renames, and explicitly reopens a reused path", async () => {
+    let controller: import("./useWorkspaceDocuments").WorkspacePaneSaveController | null = null;
+    fake.saveMarkdownDocument.mockImplementation(async (_workspace, path, _version, content) => ({ outcome: "saved", snapshot: { path, content, status: "ready", version: "v2", size: content.length } }));
+    renderControlled(openWorkspacePaneTab(initialWorkspacePaneState(), "folder/a.md"), vi.fn(), { onSaveControllerChange: value => { controller = value; } });
+    await screen.findByText("Notes");
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    const editor = EditorView.findFromDOM(screen.getByRole("textbox"))!;
+    act(() => editor.dispatch({ changes: { from: editor.state.doc.length, insert: " draft" } }));
+    await act(async () => {
+      await controller!.runFileChange(["folder/a.md"], async () => {
+        expect(fake.saveMarkdownDocument).toHaveBeenCalledWith("w", "folder/a.md", "v1", "# Notes draft");
+        return { created: [], relocated: [{ from: "folder/a.md", to: "folder/b.md" }], failures: [] };
+      });
+      expect(await controller!.runFileChange(["folder"], async () => ({ created: [], relocated: [{ from: "folder", to: "renamed" }], failures: [] }))).toMatchObject({ status: "completed" });
+      await controller!.flushAll();
+    });
+    expect(fake.saveMarkdownDocument).toHaveBeenCalledOnce();
+    expect(screen.getByText("File moved or renamed")).toBeTruthy();
+    await act(async () => {
+      await controller!.runFileChange(["folder/a.md"], async () => ({ created: [], relocated: [], failures: [{ code: "exists", message: "exists" }] }));
+    });
+    expect(screen.getByText("File moved or renamed")).toBeTruthy();
+    fake.openMarkdownDocument.mockResolvedValue({ path: "folder/a.md", content: "# Reopened", status: "ready", version: "new", size: 10 });
+    await act(async () => { expect(controller!.reopenPath("folder/a.md")).toBe(true); });
+    await waitFor(() => expect(EditorView.findFromDOM(screen.getByRole("textbox"))?.state.doc.toString()).toBe("# Reopened"));
+  });
+
+  it.each([false, true])("restores editing after a confirmed rename failure or no-op (%s)", async failure => {
+    let controller: import("./useWorkspaceDocuments").WorkspacePaneSaveController | null = null;
+    renderControlled(openWorkspacePaneTab(initialWorkspacePaneState(), "a.md"), vi.fn(), { onSaveControllerChange: value => { controller = value; } });
+    await screen.findByText("Notes");
+    await act(async () => {
+      expect(await controller!.runFileChange(["a.md"], async () => ({ created: [], relocated: [], failures: failure ? [{ code: "exists", message: "exists" }] : [] }))).toMatchObject({ status: "completed" });
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    expect(screen.getByRole("textbox")).toBeTruthy();
+    expect(screen.queryByText("File moved or renamed")).toBeNull();
+  });
+
+  it("keeps writes paused after an unknown rename result and does not replay it", async () => {
+    let controller: import("./useWorkspaceDocuments").WorkspacePaneSaveController | null = null;
+    renderControlled(openWorkspacePaneTab(initialWorkspacePaneState(), "a.md"), vi.fn(), { onSaveControllerChange: value => { controller = value; } });
+    await screen.findByText("Notes");
+    const change = vi.fn(async () => { throw new Error("connection lost"); });
+    await act(async () => {
+      expect(await controller!.runFileChange(["a.md"], change)).toMatchObject({ status: "blocked", reason: "unconfirmed" });
+      await controller!.runFileChange(["a.md"], change);
+      fake.filesChanged?.(["a.md"]);
+      await controller!.flushAll();
+    });
+    expect(change).toHaveBeenCalledOnce();
+    expect(screen.getByText("File location could not be confirmed")).toBeTruthy();
+    expect(fake.saveMarkdownDocument).not.toHaveBeenCalled();
+  });
+
+  it("preserves the user draft and reports a save conflict", async () => {
     vi.useFakeTimers();
     fake.saveMarkdownDocument.mockResolvedValue({
       outcome: "conflict",
@@ -799,11 +904,11 @@ describe("WorkspacePane", () => {
     await vi.advanceTimersByTimeAsync(500);
     await vi.runAllTimersAsync();
 
-    expect(screen.getByText(/replaced by a newer disk version/i)).toBeTruthy();
+    expect(screen.getByText(/conflict.*draft.*preserved/i)).toBeTruthy();
     await act(async () => {});
     const replacedView = EditorView.findFromDOM(screen.getByRole("textbox"));
-    expect(replacedView?.state.doc.toString()).toBe("# External");
-    expect(screen.getByText("Saved")).toBeTruthy();
+    expect(replacedView?.state.doc.toString()).toBe("# Notes local");
+    expect(screen.getByText("Save failed")).toBeTruthy();
   });
 
   it("blocks closing a dirty tab when its required save fails", async () => {
@@ -952,9 +1057,12 @@ describe("WorkspacePane", () => {
       onContextClipNavigationResult,
     });
 
-    const editor = await screen.findByTestId("markdown-editor");
-    const view = EditorView.findFromDOM(editor);
-    if (!view) throw new Error("CodeMirror view not mounted");
+    await screen.findByTestId("markdown-editor");
+    const view = await waitFor(() => {
+      const mounted = EditorView.findFromDOM(screen.getByTestId("markdown-editor"));
+      if (!mounted) throw new Error("CodeMirror view not mounted");
+      return mounted;
+    });
     await waitFor(() => expect(onContextClipNavigationResult).toHaveBeenCalledWith(expected));
     const relocatedStart = content.indexOf(exact);
     await waitFor(() => expect(view.state.selection.main).toMatchObject({

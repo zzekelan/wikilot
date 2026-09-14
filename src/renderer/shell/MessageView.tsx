@@ -11,7 +11,7 @@ import type {
   TimelineItem,
   ToolPart,
 } from "../../shared/timeline";
-import { PromptCommandBadge } from "./PromptCommandBadge";
+import { PromptCommandBubble } from "./PromptCommandBadge";
 import { ContextClipDetails } from "./ContextClipDetails";
 import { MarkdownText, type MarkdownTextProps } from "../markdown";
 
@@ -637,7 +637,7 @@ function UserMessage({ item, onClipNavigate }: {
             onNavigate={onClipNavigate}
           />
         ) : null}
-        {item.command ? <PromptCommandBadge command={item.command} /> : item.text.trim().length > 0 ? (
+        {item.command ? <PromptCommandBubble command={item.command} text={item.text} /> : item.text.trim().length > 0 ? (
           <div className="msg-user-bubble">
             <div className="msg-user-text">{item.text}</div>
           </div>

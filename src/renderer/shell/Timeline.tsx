@@ -1,4 +1,4 @@
-import { PromptCommandBadge, type PendingPrompt } from "./PromptCommandBadge";
+import { PromptCommandBubble, type PendingPrompt } from "./PromptCommandBadge";
 import {
   useCallback,
   useEffect,
@@ -182,7 +182,7 @@ export function Timeline({
                 {isPendingRow ? (
                   <div className="anim-in msg-user msg-user-pending" data-testid="timeline-pending">
                     <div className="msg-user-wrap">
-                      {pendingPrompt && typeof pendingPrompt === "object" ? <PromptCommandBadge command={pendingPrompt.command} /> : (
+                      {pendingPrompt && typeof pendingPrompt === "object" ? <PromptCommandBubble command={pendingPrompt.command} text={pendingPrompt.text} /> : (
                         <div className="msg-user-bubble">
                           <div className="msg-user-text">{pendingPrompt}</div>
                         </div>

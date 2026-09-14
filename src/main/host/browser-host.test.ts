@@ -1,3 +1,5 @@
+import { access, readFile, readdir } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { EventEmitter } from "node:events";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { describe, expect, it, vi } from "vitest";
@@ -96,6 +98,8 @@ function fakeApp(overrides: Partial<WikilotApplication>): WikilotApplication {
     retryWorkspaceGraph: notImplemented,
     getWorkspaceLinkIndex: notImplemented,
     resolveWorkspaceLink: notImplemented,
+    changeWorkspaceFiles: notImplemented,
+    importWorkspaceFiles: notImplemented,
     createWorkspaceMarkdown: notImplemented,
     getWorkspacePdfSource: notImplemented,
     releaseWorkspacePdfSource: notImplemented,
@@ -111,8 +115,13 @@ function fakeApp(overrides: Partial<WikilotApplication>): WikilotApplication {
     setCredential: notImplemented,
     deleteCredential: notImplemented,
     getAppDefaults: notImplemented,
-    getReviewSettings: () => ({ model: null }),
-    updateReviewSettings: (settings) => settings,
+    getVersionChanges: notImplemented,
+    getVersionFileDiff: notImplemented,
+    getVersions: notImplemented,
+    saveVersion: notImplemented,
+    restoreVersion: notImplemented,
+    getUtilitySettings: () => ({ model: null }),
+    updateUtilitySettings: () => ({ model: null }),
     updateAppDefaults: notImplemented,
     prompt: notImplemented,
     abort: notImplemented,
@@ -1232,6 +1241,22 @@ describe("browser host middleware (HTTP/SSE ↔ WikilotApplication)", () => {
     }
   });
 
+  it("routes raw Utility Model settings through the application and reports validation errors", async () => {
+    const input = { model: { provider: "provider", model: "model" } };
+    const updateUtilitySettings = vi.fn().mockReturnValueOnce(input)
+      .mockImplementationOnce(() => { throw new Error("Invalid review selection"); });
+    const middleware = createBrowserHostMiddleware(fakeApp({ updateUtilitySettings }));
+    for (const [body, status] of [[input, 200], [{ model: {} }, 400]] as const) {
+      const res = fakeResponse();
+      await middleware(fakeRequest({ method: "POST", url: "/api/utility-model/settings", body }), res, () => {
+        throw new Error("next must not run");
+      });
+      expect(updateUtilitySettings).toHaveBeenLastCalledWith(body);
+      expect(res.statusCode).toBe(status);
+      expect(res.json()).toEqual(status === 200 ? input : { error: "Invalid review selection" });
+    }
+  });
+
   it("routes App Defaults reads and updates", async () => {
     const sessionModel = {
       provider: "deepseek",
@@ -1513,5 +1538,113 @@ describe("browser host middleware (HTTP/SSE ↔ WikilotApplication)", () => {
 
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({ cwd: "/tmp/picked" });
+  });
+});
+
+describe("native imports", () => {
+  it("passes only chooser-selected sources to the Application and returns its report", async () => {
+    const report = { created: ["raw/photo.png"], relocated: [], failures: [] };
+    const importWorkspaceFiles = vi.fn(async () => report);
+    const pickImport = vi.fn(async () => ["/private/selected/photo.png"]);
+    const host = createBrowserHostMiddleware(fakeApp({ importWorkspaceFiles }), { pickImport });
+    const res = fakeResponse();
+    await host(fakeRequest({ method: "POST", url: "/api/workspace/files/import", body: { workspaceId: "w", destination: "raw", kind: "file" } }), res, vi.fn());
+    expect(importWorkspaceFiles).toHaveBeenCalledWith("w", "raw", ["/private/selected/photo.png"]);
+    expect(res.json()).toEqual(report);
+  });
+
+  it("rejects caller-supplied source paths and untrusted callers before opening a window", async () => {
+    const pickImport = vi.fn(async () => []);
+    const importWorkspaceFiles = vi.fn();
+    const host = createBrowserHostMiddleware(fakeApp({ importWorkspaceFiles }), { pickImport });
+    const body = { workspaceId: "w", destination: "", kind: "directory" };
+    for (const extra of [
+      { body: { ...body, sourcePaths: ["/private/secret"] } },
+      { headers: { host: "localhost:5197", origin: "https://evil.test" } },
+      { remoteAddress: "192.168.1.2" },
+    ]) {
+      const res = fakeResponse();
+      await host(fakeRequest({ method: "POST", url: "/api/workspace/files/import", body, ...extra }), res, vi.fn());
+      expect(res.statusCode).toBeGreaterThanOrEqual(400);
+    }
+    expect(pickImport).not.toHaveBeenCalled();
+    expect(importWorkspaceFiles).not.toHaveBeenCalled();
+  });
+
+  it("cancels quietly without importing and aborts a disconnected caller's window", async () => {
+    const importWorkspaceFiles = vi.fn();
+    const res = fakeResponse();
+    const host = createBrowserHostMiddleware(fakeApp({ importWorkspaceFiles }), {
+      pickImport: async ({ signal }) => { res.emit("close"); expect(signal.aborted).toBe(true); return null; },
+    });
+    await host(fakeRequest({ method: "POST", url: "/api/workspace/files/import", body: { workspaceId: "w", destination: "", kind: "file" } }), res, vi.fn());
+    expect(importWorkspaceFiles).not.toHaveBeenCalled();
+    const cancelled = fakeResponse();
+    await createBrowserHostMiddleware(fakeApp({ importWorkspaceFiles }), { pickImport: async () => null })(
+      fakeRequest({ method: "POST", url: "/api/workspace/files/import", body: { workspaceId: "w", destination: "", kind: "directory" } }), cancelled, vi.fn());
+    expect(cancelled.json()).toBeNull();
+  });
+});
+
+
+describe("external file uploads", () => {
+  function upload(entries: unknown[], chunks: Buffer[] = [], extra = {}) {
+    const manifest = Buffer.from(JSON.stringify({ workspaceId: "w", destination: "raw", entries: entries.map(entry => ({ source: 0, ...(entry as object) })), ...extra }));
+    const header = Buffer.alloc(4); header.writeUInt32BE(manifest.length);
+    const req = fakeRequest({ method: "POST", url: "/api/workspace/files/upload" });
+    req[Symbol.asyncIterator] = async function* () {
+      // Split metadata and file bytes across arbitrary transport chunks.
+      const body = Buffer.concat([header, manifest, ...chunks]);
+      for (let offset = 0; offset < body.length; offset += 3) yield body.subarray(offset, offset + 3);
+      return undefined;
+    };
+    return req;
+  }
+
+  it("streams binary and empty nested directories into owned sources and removes them after import", async () => {
+    let root = "";
+    const importWorkspaceFiles = vi.fn(async (id: string, destination: string, sources: string[]) => {
+      expect([id, destination]).toEqual(["w", "raw"]);
+      root = dirname(dirname(sources[0]!));
+      expect(await readFile(sources[0]!)).toEqual(Buffer.from([0, 255, 10, 128]));
+      expect(await readdir(join(sources[1]!, "empty"))).toEqual([]);
+      expect(await readFile(join(sources[1]!, "note.txt"), "utf8")).toBe("ok");
+      return { created: ["raw/photo.bin", "raw/bundle"], relocated: [], failures: [] };
+    });
+    const res = fakeResponse();
+    await createBrowserHostMiddleware(fakeApp({ importWorkspaceFiles }))(upload([
+      { path: "photo.bin", kind: "file", size: 4 }, { source: 1, path: "bundle", kind: "directory", size: 0 },
+      { source: 1, path: "bundle/empty", kind: "directory", size: 0 }, { source: 1, path: "bundle/note.txt", kind: "file", size: 2 },
+    ], [Buffer.from([0, 255, 10, 128]), Buffer.from("ok")]), res, vi.fn());
+    expect(res.json()).toMatchObject({ created: ["raw/photo.bin", "raw/bundle"] });
+    await expect(access(root)).rejects.toThrow();
+  });
+
+  it("rejects unsafe entries, local source paths and truncated or surplus bodies without importing", async () => {
+    const importWorkspaceFiles = vi.fn();
+    const host = createBrowserHostMiddleware(fakeApp({ importWorkspaceFiles }));
+    for (const req of [
+      upload([{ path: "../escape", kind: "file", size: 0 }]),
+      upload([{ path: "/absolute", kind: "file", size: 0 }]),
+      upload([{ path: "x", kind: "file", size: 0 }], [], { sourcePaths: ["/secret"] }),
+      upload([{ path: "x", kind: "file", size: 4 }], [Buffer.from("x")]),
+      upload([{ path: "x", kind: "file", size: 0 }], [Buffer.from("extra")]),
+      upload([{ path: "x", kind: "file", size: 0 }, { path: "x", kind: "file", size: 0 }]),
+    ]) {
+      const res = fakeResponse(); await host(req, res, vi.fn());
+      expect(res.statusCode).toBeGreaterThanOrEqual(400);
+    }
+    expect(importWorkspaceFiles).not.toHaveBeenCalled();
+  });
+
+  it("does not import when the caller disconnects before the completed body is consumed", async () => {
+    const res = fakeResponse();
+    const req = upload([{ path: "x", kind: "file", size: 0 }]);
+    const read = req[Symbol.asyncIterator].bind(req);
+    req[Symbol.asyncIterator] = async function* () { yield* read(); res.emit("close"); return undefined; };
+    const importWorkspaceFiles = vi.fn();
+    await createBrowserHostMiddleware(fakeApp({ importWorkspaceFiles }))(req, res, vi.fn());
+    expect(importWorkspaceFiles).not.toHaveBeenCalled();
+    expect(res.statusCode).toBeGreaterThanOrEqual(400);
   });
 });

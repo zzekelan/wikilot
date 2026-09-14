@@ -224,8 +224,10 @@ export function WorkspacePane({
     loadPath,
     releasePdfSource,
     savePath,
+    pathState,
     changeContent,
-  } = useWorkspaceDocuments({ workspaceId, activePath: documentPath, onSaveControllerChange, connectionRevision });
+  } = useWorkspaceDocuments({ workspaceId, activePath: documentPath, openPaths: tabs.tabs, onSaveControllerChange, connectionRevision });
+  const activePathState = documentPath ? pathState(documentPath) : undefined;
   const activeDocument = documentPath ? documents[documentPath] : undefined;
   const activeMode = activePath ? tabs.modes[activePath] ?? "reading" : "reading";
   const readingMode = compact ? "wide" : tabs.readingMode;
@@ -632,7 +634,8 @@ export function WorkspacePane({
 
   async function close(path: string) {
     const document = documents[path];
-    if (document?.saveState !== "saved" && !(await savePath(path, true))) return;
+    if (pathState(path) === "protecting") return;
+    if (!pathState(path) && document?.saveState !== "saved" && !(await savePath(path, true))) return;
     const next = closeWorkspacePaneTab(tabs, path);
     if (path === WORKSPACE_GRAPH_TAB_ID) {
       graphViewState.current = { positions: new Map(), pins: new Map(), camera: null };
@@ -716,7 +719,7 @@ export function WorkspacePane({
       <span className="workspace-pane-toolbar-right">
         {graphActive ? <span className="workspace-pane-hint">click a node to open its tab</span> : null}
         {activeDocument ? <span className={`workspace-save-pill workspace-save-${saveClass}`}>{saveLabel}</span> : null}
-        {activePath !== WORKSPACE_GRAPH_TAB_ID && activeDocument?.snapshot.status === "ready" ? <span className="workspace-mode-switch" aria-label="Markdown mode">
+        {activePath !== WORKSPACE_GRAPH_TAB_ID && !activePathState && activeDocument?.snapshot.status === "ready" ? <span className="workspace-mode-switch" aria-label="Markdown mode">
           <button type="button" className={activeMode === "reading" ? "workspace-mode-active" : ""} aria-label="Read" title="Read mode (⌘⇧E toggles)" onClick={() => onTabsChange(setWorkspacePaneMode(tabs, activePath, "reading"))}><span>Read</span></button>
           <button type="button" className={activeMode === "editing" ? "workspace-mode-active" : ""} aria-label="Edit" title="Edit mode (⌘⇧E toggles)" onClick={() => onTabsChange(setWorkspacePaneMode(tabs, activePath, "editing"))}><span>Edit</span></button>
         </span> : null}
@@ -726,7 +729,7 @@ export function WorkspacePane({
     {graphActive && graphIsRetrying ? <div className="workspace-document-notice workspace-graph-retrying" role="status">Retrying Graph…</div> : null}
     {restoreReport ? <div className="workspace-pane-restore-note" role="status" data-testid="pane-restore-banner"><span>{restoreReport.warning ?? `Restored workspace pane — skipped ${restoreReport.skipped} invalid item${restoreReport.skipped === 1 ? "" : "s"}.`}</span><button type="button" className="workspace-pane-restore-dismiss" onClick={onDismissRestoreReport}>Dismiss</button></div> : null}
     {activeDocument?.notice ? <div className="workspace-document-notice" role="status">{activeDocument.notice}</div> : null}
-    {activeDocument?.error ? <div className="workspace-document-error" role="alert"><span>{activeDocument.error}</span><button type="button" className="btn-secondary" onClick={() => activePath && void savePath(activePath, true)}>Retry</button></div> : null}
+    {!activePathState && activeDocument?.error ? <div className="workspace-document-error" role="alert"><span>{activeDocument.error}</span><button type="button" className="btn-secondary" onClick={() => activePath && void savePath(activePath, true)}>Retry</button></div> : null}
     <div className="workspace-pane-body" data-testid="workspace-pane-content" ref={bodyRef} tabIndex={-1} onScroll={onScroll}>
       {graphSnapshot.status === "ready" && graphSnapshot.nodes.length > 0 && tabs.tabs.includes(WORKSPACE_GRAPH_TAB_ID)
         ? <div className={graphActive ? "workspace-graph-host" : "workspace-graph-host workspace-graph-host-hidden"}>
@@ -744,6 +747,10 @@ export function WorkspacePane({
           : graphSnapshot.nodes.length === 0
             ? <div className="workspace-graph-state"><Network size={24} /><p>No Markdown notes yet.</p></div>
             : null)
+      : activePathState ? <div className="workspace-pane-error" role="status"><FileWarning size={26} />
+          <p>{activePathState === "trashed" ? "File moved to Trash" : activePathState === "relocated" ? "File moved or renamed" : activePathState === "unconfirmed" ? "File location could not be confirmed" : "Saving before file operation…"}</p>
+          <span>{activePathState === "protecting" ? "Edits are paused while the file operation completes." : activePathState === "trashed" ? "Restore the file from Trash, then open it from the File Tree." : activePathState === "relocated" ? "Open the new path from the File Tree." : "Check the File Tree and disk before reopening. Writes to this path are paused."}</span><code>{activePath}</code>
+        </div>
       : loading ? <div className="workspace-pane-status" role="status"><span className="workspace-graph-spinner" /><p>Loading document…</p></div>
       : loadError ? <div className="workspace-pane-error" role="alert"><FileWarning size={26} /><p>{pdfError?.title ?? (isUnavailableError(loadError.message) ? "File is not available" : "Could not open file")}</p><span>{pdfError?.detail ?? loadError.message}</span><code>{activePath}</code><button type="button" className="workspace-pane-state-action" onClick={() => void loadPath(activePath)}>Retry</button></div>
       : activeDocument ? <>

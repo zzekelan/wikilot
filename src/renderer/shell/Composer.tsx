@@ -9,7 +9,7 @@ import {
   type KeyboardEvent,
 } from "react";
 import { ArrowLeft, ArrowUp, BookOpen, Brain, Check, ChevronRight, Cpu, RefreshCw, Square, Zap, type LucideIcon } from "lucide-react";
-import { normalizeStructuredPrompt, sameContextClip, type ContextClip, type PromptCommandId } from "../../shared/session";
+import { normalizeStructuredPrompt, sameContextClip, matchPromptCommand, type ContextClip, type PromptCommandId } from "../../shared/session";
 import {
   type ModelCatalogProvider,
   type ThinkingLevel,
@@ -87,16 +87,20 @@ type ModelOption = {
   thinkingLevels: ThinkingLevel[];
 };
 
-function flattenModelCatalog(catalog: ModelCatalogProvider[]): ModelOption[] {
-  return catalog.flatMap((provider) =>
-    provider.models.map((model) => ({
+function groupModelCatalog(catalog: ModelCatalogProvider[]) {
+  let startIndex = 0;
+  return catalog.filter((provider) => provider.models.length > 0).map((provider) => {
+    const options: ModelOption[] = provider.models.map((model) => ({
       provider: provider.id,
       providerName: provider.name,
       model: model.id,
       modelName: model.name,
       thinkingLevels: model.thinkingLevels,
-    })),
-  );
+    }));
+    const group = { provider: provider.id, name: provider.name, startIndex, options };
+    startIndex += options.length;
+    return group;
+  });
 }
 
 function modelLabel(configuration: SessionConfiguration): string {
@@ -235,7 +239,8 @@ export function Composer({
     commandQuery !== null &&
     commandMatches.length > 0 &&
     !pickerOpen;
-  const modelOptions = useMemo(() => flattenModelCatalog(catalog), [catalog]);
+  const modelGroups = useMemo(() => groupModelCatalog(catalog), [catalog]);
+  const modelOptions = useMemo(() => modelGroups.flatMap((group) => group.options), [modelGroups]);
   const selectedModelLabel = modelLabel(configuration);
   const selectedModelDisplayLabel = modelDisplayLabel(configuration, modelOptions);
   const thinkingLevel = configuration.thinkingLevel ?? "off";
@@ -409,7 +414,7 @@ export function Composer({
       return;
     }
     if (view === "thinking") {
-      const currentModel = flattenModelCatalog(nextCatalog).find(
+      const currentModel = groupModelCatalog(nextCatalog).flatMap((group) => group.options).find(
         (option) => option.provider === configuration.provider && option.model === configuration.model,
       );
       setPendingModel(currentModel ?? null);
@@ -484,13 +489,9 @@ export function Composer({
   async function selectCommand(command: ComposerCommand) {
     setMenuDismissed(true);
     setError(null);
-    if (command.kind === "skill") {
-      setText(`/skill:${command.skillName} `);
+    if (command.kind === "skill" || command.kind === "prompt") {
+      setText(`${command.label} `);
       inputRef.current?.focus();
-      return;
-    }
-    if (command.kind === "prompt") {
-      await sendPrompt(command.label, command.id);
       return;
     }
 
@@ -520,7 +521,7 @@ export function Composer({
         ? undefined
         : commandMatches.find(
             (command) =>
-              command.kind !== "skill" && command.label === trimmed,
+              command.kind === "action" && command.label === trimmed,
           );
     const selectedCommand = commandMenuOpen
       ? commandMatches[activeCommandIndex]
@@ -529,7 +530,7 @@ export function Composer({
       await selectCommand(selectedCommand);
       return;
     }
-    await sendPrompt(trimmed);
+    await sendPrompt(trimmed, matchPromptCommand(trimmed));
   }
 
   async function sendPrompt(trimmed: string, command?: PromptCommandId) {
@@ -560,7 +561,7 @@ export function Composer({
     sendingRef.current = true;
     setSending(true);
     setError(null);
-    const pendingLabel: PendingPrompt = command ? { command } : trimmed || `${contextClips.length} Context Clips`;
+    const pendingLabel: PendingPrompt = command ? { command, text: trimmed } : trimmed || `${contextClips.length} Context Clips`;
     let draftCleared = false;
     const clearSubmittedDraft = () => {
       if (draftCleared) return;
@@ -709,18 +710,27 @@ export function Composer({
 
   const picker = <>
     {pickerOpen && (catalogLoading || modelOptions.length > 0) && (!commandPicker || pickerView === "model") ? (
-      <div ref={modelPickerRef} className={commandPicker ? "composer-command-menu" : "composer-picker composer-model-picker"} data-testid="composer-model-picker" role="listbox" aria-label="Select Model">
+      <div ref={modelPickerRef} className={commandPicker ? "composer-command-menu composer-model-picker" : "composer-picker composer-model-picker"} data-testid="composer-model-picker" role="listbox" aria-label="Select Model">
         {catalogLoading ? <p className="composer-picker-empty">Loading Models…</p> : (
           <div className="composer-picker-options">
-            {modelOptions.map((option, index) => {
-              const applied = option.provider === configuration.provider && option.model === configuration.model;
-              return (
-                <button key={`${option.provider}/${option.model}`} type="button" role="option" aria-selected={applied} className={index === activeModelIndex ? "composer-picker-option composer-picker-option-active" : "composer-picker-option"} data-testid="composer-model-option" onMouseDown={(event) => { if (commandPicker) event.preventDefault(); }} onMouseMove={() => setActiveModelIndex(index)} onClick={() => { setActiveModelIndex(index); selectModel(option); }}>
-                  <span className="composer-picker-label">{option.provider}/{option.model}</span>
-                  <ChevronRight size={14} aria-hidden="true" className="composer-chip-chevron" />
-                </button>
-              );
-            })}
+            {modelGroups.map((group) => (
+              <div key={group.provider} className="composer-model-group" role="group" aria-label={group.name}>
+                <div className="composer-model-group-title" aria-hidden="true">{group.name}</div>
+                {group.options.map((option, offset) => {
+                  const index = group.startIndex + offset;
+                  const applied = option.provider === configuration.provider && option.model === configuration.model;
+                  return (
+                    <button key={option.model} type="button" role="option" aria-selected={applied} title={`${option.provider}/${option.model}`} className={index === activeModelIndex ? "composer-picker-option composer-picker-option-active" : "composer-picker-option"} data-testid="composer-model-option" onMouseDown={(event) => { if (commandPicker) event.preventDefault(); }} onMouseMove={() => setActiveModelIndex(index)} onClick={() => { setActiveModelIndex(index); selectModel(option); }}>
+                      <span className="composer-picker-label">{option.modelName}</span>
+                      <span className="composer-model-option-state">
+                        {applied ? <Check size={14} aria-hidden="true" className="composer-picker-check" /> : null}
+                        <ChevronRight size={14} aria-hidden="true" className="composer-chip-chevron" />
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
           </div>
         )}
       </div>
@@ -775,7 +785,6 @@ export function Composer({
           >
             {commandMatches.map((command, index) => {
               const unavailable =
-                (command.kind === "prompt" && (!sendingEnabled || sessionBusy || sending)) ||
                 (command.kind === "action" &&
                   command.id === "reload" &&
                   sessionBusy);

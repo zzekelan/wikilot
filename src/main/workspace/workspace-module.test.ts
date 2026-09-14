@@ -43,6 +43,11 @@ describe("WorkspaceModule", () => {
     const workspace = createWorkspaceModuleWithAdapters(
       { agentDir: join(root, "agent"), hasActiveTurn },
       {
+        trashEntry: async path => {
+          if (path.endsWith("blocked.md")) throw new Error("denied");
+          const bin = join(root, "trash"); mkdirSync(bin, { recursive: true });
+          renameSync(path, join(bin, path.split("/").at(-1)!));
+        },
         watchFiles(_cwd, listener, onRecovery) {
           stops.push(stop);
           notify = listener;
@@ -60,6 +65,213 @@ describe("WorkspaceModule", () => {
       recover: () => recover?.(),
     };
   }
+
+  it("trashes outermost selected entries, retains failed items and rejects unsafe paths", async () => {
+    const { root, cwd, workspace } = setup(); const { id } = workspace.open(cwd);
+    mkdirSync(join(cwd, "folder")); writeFileSync(join(cwd, "folder/note.md"), "keep recoverable");
+    writeFileSync(join(cwd, "literal[1].md"), "literal name"); writeFileSync(join(cwd, "blocked.md"), "stay");
+    symlinkSync(root, join(cwd, "escape"));
+    try {
+      const report = await workspace.changeFiles(id, { kind: "trash", paths: ["folder/note.md", "folder", "literal[1].md", "blocked.md", "", "../outside", "escape", ".git"] });
+      expect(report.trashed).toEqual(["folder", "literal[1].md"]);
+      expect(report.failures.map(item => item.source)).toEqual(expect.arrayContaining(["blocked.md", "", "../outside", "escape", ".git"]));
+      expect(workspace.openMarkdownDocument(id, "blocked.md")).toMatchObject({ content: "stay" });
+      expect(readFileSync(join(root, "trash/folder/note.md"), "utf8")).toBe("keep recoverable");
+      expect(readFileSync(join(root, "trash/literal[1].md"), "utf8")).toBe("literal name");
+      expect(workspace.listFiles(id, "").entries.map(entry => entry.path)).not.toContain("folder");
+    } finally { await workspace.shutdown(); }
+  });
+
+  it("imports binary files and whole directories without changing originals or merging conflicts", async () => {
+    const { root, cwd, workspace } = setup();
+    const { id } = workspace.open(cwd);
+    const source = join(root, "source");
+    mkdirSync(join(source, "bundle/nested"), { recursive: true });
+    const bytes = Buffer.from([0, 255, 128, 10, 42]);
+    writeFileSync(join(source, "photo.png"), bytes);
+    writeFileSync(join(source, "bundle/nested/paper.pdf"), bytes);
+    mkdirSync(join(cwd, "raw/bundle"));
+    writeFileSync(join(cwd, "raw/bundle/keep.md"), "keep");
+    writeFileSync(join(cwd, "raw/photo.png"), "existing");
+    try {
+      const report = await workspace.importFiles(id, "raw", [join(source, "photo.png"), join(source, "bundle")]);
+      expect(report).toEqual({ created: ["raw/photo (1).png", "raw/bundle (1)"], relocated: [], failures: [] });
+      expect(readFileSync(join(cwd, "raw/photo (1).png"))).toEqual(bytes);
+      expect(readFileSync(join(cwd, "raw/bundle (1)/nested/paper.pdf"))).toEqual(bytes);
+      expect(readFileSync(join(source, "photo.png"))).toEqual(bytes);
+      expect(readFileSync(join(source, "bundle/nested/paper.pdf"))).toEqual(bytes);
+      expect(readFileSync(join(cwd, "raw/photo.png"), "utf8")).toBe("existing");
+      expect(workspace.listFiles(id, "raw/bundle").entries.map(entry => entry.name)).toEqual(["keep.md"]);
+    } finally { await workspace.shutdown(); }
+  });
+
+  it("cleans a failed imported folder and continues the batch without following links", async () => {
+    const { root, cwd, workspace } = setup();
+    const { id } = workspace.open(cwd);
+    const source = join(root, "sources");
+    mkdirSync(join(source, "broken"), { recursive: true });
+    writeFileSync(join(source, "broken/a.md"), "copied before failure");
+    writeFileSync(join(source, "good.md"), "good");
+    symlinkSync(join(source, "good.md"), join(source, "broken/z-link"));
+    symlinkSync(join(source, "good.md"), join(source, "link"));
+    mkdirSync(join(cwd, "raw/broken"));
+    writeFileSync(join(cwd, "raw/broken/keep.md"), "keep");
+    try {
+      const report = await workspace.importFiles(id, "raw", [join(source, "broken"), join(source, "missing"), join(source, "link"), join(source, "good.md")]);
+      expect(report.created).toEqual(["raw/good.md"]);
+      expect(report.failures).toMatchObject([{ source: "broken", code: "invalid-path" }, { source: "missing", code: "unavailable" }, { source: "link", code: "invalid-path" }]);
+      expect(workspace.listFiles(id, "raw").entries.map(entry => entry.name)).toEqual(["broken", "good.md"]);
+      expect(workspace.openMarkdownDocument(id, "raw/broken/keep.md")).toMatchObject({ content: "keep" });
+      expect(readFileSync(join(source, "broken/a.md"), "utf8")).toBe("copied before failure");
+      expect(readFileSync(join(source, "good.md"), "utf8")).toBe("good");
+    } finally { await workspace.shutdown(); }
+  });
+
+  it("gates import destinations and rejects excluded contents and recursive self-copy", async () => {
+    const { root, cwd, workspace } = setup();
+    const { id } = workspace.open(cwd);
+    const source = join(root, "source");
+    mkdirSync(join(source, "bundle/.git"), { recursive: true });
+    writeFileSync(join(source, "ok.md"), "ok");
+    symlinkSync(source, join(cwd, "linked"));
+    try {
+      for (const target of ["../source", source, "linked", ".git", "missing", "AGENTS.md"]) {
+        expect(await workspace.importFiles(id, target, [join(source, "ok.md")])).toMatchObject({ created: [], failures: [{ code: "invalid-path" }] });
+      }
+      expect(await workspace.importFiles(id, "raw", [cwd, join(source, "bundle"), join(source, "bundle/.git")])).toMatchObject({ created: [], failures: [{ code: "invalid-path" }, { code: "invalid-path" }, { code: "invalid-path" }] });
+      expect(workspace.listFiles(id, "raw").entries).toEqual([]);
+      const reports = await Promise.all([workspace.importFiles(id, "", [join(source, "ok.md")]), workspace.importFiles(id, "", [join(source, "ok.md")])]);
+      expect(reports.map(report => report.created)).toEqual([["ok.md"], ["ok (1).md"]]);
+    } finally { await workspace.shutdown(); }
+  });
+
+  it("does not start importing when the upload has been cancelled", async () => {
+    const { root, cwd, workspace } = setup();
+    const { id } = workspace.open(cwd);
+    const source = join(root, "cancelled.bin");
+    writeFileSync(source, Buffer.from([0, 255]));
+    const controller = new AbortController(); controller.abort();
+    try {
+      expect(await workspace.importFiles(id, "raw", [source], controller.signal)).toEqual({ created: [], relocated: [], failures: [] });
+      expect(workspace.listFiles(id, "raw").entries).toEqual([]);
+      expect(readFileSync(source)).toEqual(Buffer.from([0, 255]));
+    } finally { await workspace.shutdown(); }
+  });
+
+  it("moves outermost selections and retains conflicts while continuing the batch", async () => {
+    const { cwd, workspace } = setup();
+    const { id } = workspace.open(cwd);
+    mkdirSync(join(cwd, "notes")); mkdirSync(join(cwd, "target"));
+    writeFileSync(join(cwd, "notes/a.md"), "nested");
+    writeFileSync(join(cwd, "keep.md"), "source");
+    writeFileSync(join(cwd, "target/keep.md"), "target");
+    writeFileSync(join(cwd, "last.md"), "last");
+    const report = await workspace.changeFiles(id, { kind: "move", paths: ["notes/a.md", "keep.md", "missing", "notes", "last.md"], destination: "target" });
+    expect(report.relocated).toEqual([{ from: "notes", to: "target/notes" }, { from: "last.md", to: "target/last.md" }]);
+    expect(report.failures).toMatchObject([{ source: "keep.md", code: "exists" }, { source: "missing", code: "unavailable" }]);
+    expect(workspace.openMarkdownDocument(id, "target/notes/a.md")).toMatchObject({ content: "nested" });
+    expect(workspace.openMarkdownDocument(id, "keep.md")).toMatchObject({ content: "source" });
+    expect(workspace.openMarkdownDocument(id, "target/keep.md")).toMatchObject({ content: "target" });
+    await workspace.shutdown();
+  });
+
+  it("rejects invalid destinations before starting and enforces move containment and no-ops", async () => {
+    const { cwd, root, workspace } = setup();
+    const { id } = workspace.open(cwd);
+    mkdirSync(join(cwd, "folder/child"), { recursive: true });
+    mkdirSync(join(root, "outside"));
+    symlinkSync(join(root, "outside"), join(cwd, "linked"));
+    writeFileSync(join(cwd, "a.md"), "a");
+    for (const destination of ["missing", "a.md", "../outside", "linked", ".git"]) {
+      expect(await workspace.changeFiles(id, { kind: "move", paths: ["a.md"], destination })).toMatchObject({ relocated: [], failures: [{ code: "invalid-path" }] });
+      expect(workspace.openMarkdownDocument(id, "a.md")).toMatchObject({ content: "a" });
+    }
+    for (const destination of ["folder", "folder/child"]) {
+      expect(await workspace.changeFiles(id, { kind: "move", paths: ["folder"], destination })).toMatchObject({ relocated: [], failures: [{ source: "folder", code: "invalid-path" }] });
+    }
+    expect(await workspace.changeFiles(id, { kind: "move", paths: ["", "../outside", "linked"], destination: "folder" })).toMatchObject({ relocated: [], failures: [{ code: "invalid-path" }, { code: "invalid-path" }, { code: "invalid-path" }] });
+    expect(await workspace.changeFiles(id, { kind: "move", paths: ["a.md", "a.md"], destination: "" })).toEqual({ created: [], relocated: [], failures: [] });
+    expect(await workspace.changeFiles(id, { kind: "move", paths: ["folder/child"], destination: "" })).toEqual({ created: [], relocated: [{ from: "folder/child", to: "child" }], failures: [] });
+    await workspace.shutdown();
+  });
+
+  it("waits for descendant saves before renaming a directory and never writes its old path", async () => {
+    const { cwd, workspace } = setup();
+    const { id } = workspace.open(cwd);
+    mkdirSync(join(cwd, "notes"));
+    writeFileSync(join(cwd, "notes/a.md"), "original");
+    const document = workspace.openMarkdownDocument(id, "notes/a.md");
+    const save = workspace.saveMarkdownDocument(id, "notes/a.md", { version: document.version!, content: "draft" });
+    const change = workspace.changeFiles(id, { kind: "rename", path: "notes", name: "renamed" });
+    expect((await save).outcome).toBe("saved");
+    expect(await change).toEqual({ created: [], relocated: [{ from: "notes", to: "renamed" }], failures: [] });
+    expect(workspace.openMarkdownDocument(id, "renamed/a.md")).toMatchObject({ content: "draft" });
+    expect((await workspace.saveMarkdownDocument(id, "notes/a.md", { version: document.version!, content: "late" })).outcome).toBe("conflict");
+    expect(workspace.listFiles(id, "").entries.some(entry => entry.path === "notes")).toBe(false);
+    await workspace.shutdown();
+  });
+
+  it("preserves entries on rename conflicts, no-ops, invalid paths and symlink traversal", async () => {
+    const { root, cwd, workspace } = setup();
+    const { id } = workspace.open(cwd);
+    writeFileSync(join(cwd, "a.md"), "original");
+    writeFileSync(join(cwd, "b.md"), "target");
+    mkdirSync(join(root, "outside"));
+    writeFileSync(join(root, "outside/a.md"), "outside");
+    symlinkSync(join(root, "outside"), join(cwd, "linked"));
+    symlinkSync(join(root, "missing"), join(cwd, "dangling"));
+    for (const [path, name, code] of [
+      ["a.md", "b.md", "exists"], ["a.md", "dangling", "exists"],
+      ["a.md", "", "invalid-path"], ["a.md", "../escape", "invalid-path"],
+      ["a.md", ".git", "invalid-path"], ["", "renamed", "invalid-path"],
+      ["../outside/a.md", "renamed", "invalid-path"], ["linked/a.md", "renamed", "invalid-path"],
+      ["absent", "renamed", "unavailable"],
+    ]) {
+      expect(await workspace.changeFiles(id, { kind: "rename", path: path!, name: name! })).toMatchObject({ relocated: [], failures: [{ code }] });
+    }
+    expect(await workspace.changeFiles(id, { kind: "rename", path: "a.md", name: "a.md" })).toEqual({ created: [], relocated: [], failures: [] });
+    expect(workspace.openMarkdownDocument(id, "a.md")).toMatchObject({ content: "original" });
+    expect(workspace.openMarkdownDocument(id, "b.md")).toMatchObject({ content: "target" });
+    expect(readFileSync(join(root, "outside/a.md"), "utf8")).toBe("outside");
+    await workspace.shutdown();
+  });
+
+  it("creates exact filenames and empty directories through the Workspace interface", async () => {
+    const { cwd, workspace } = setup();
+    const { id } = workspace.open(cwd);
+    expect(await workspace.changeFiles(id, { kind: "create", parent: "", name: "资料", entryKind: "directory" })).toEqual({ created: ["资料"], relocated: [], failures: [] });
+    expect(await workspace.changeFiles(id, { kind: "create", parent: "资料", name: "LICENSE", entryKind: "file" })).toEqual({ created: ["资料/LICENSE"], relocated: [], failures: [] });
+    expect(workspace.listFiles(id, "资料").entries).toEqual([{ name: "LICENSE", path: "资料/LICENSE", kind: "file" }]);
+    expect(readFileSync(join(cwd, "资料/LICENSE"), "utf8")).toBe("");
+    expect((await workspace.changeFiles(id, { kind: "create", parent: "", name: "a:b", entryKind: "file" })).created).toEqual(["a:b"]);
+    await workspace.shutdown();
+  });
+
+  it("rejects conflicting names, invalid paths, symlinks, exclusions and missing parents without changing disk", async () => {
+    const { root, cwd, workspace } = setup();
+    const { id } = workspace.open(cwd);
+    writeFileSync(join(cwd, "keep"), "original");
+    mkdirSync(join(root, "outside"));
+    symlinkSync(join(root, "outside"), join(cwd, "linked"));
+    symlinkSync(join(root, "missing"), join(cwd, "dangling"));
+    for (const [parent, name, code] of [
+      ["", "keep", "exists"], ["", "dangling", "exists"],
+      ["", "", "invalid-path"], ["", "..", "invalid-path"],
+      ["", "a/b", "invalid-path"], ["", "a\\b", "invalid-path"],
+      ["", "bad\nname", "invalid-path"], ["", ".git", "invalid-path"],
+      ["node_modules", "new", "invalid-path"], ["../outside", "new", "invalid-path"],
+      [root, "new", "invalid-path"], ["linked", "new", "invalid-path"],
+      ["absent/nested", "new", "unavailable"], ["keep", "new", "unavailable"],
+    ]) {
+      for (const entryKind of ["file", "directory"] as const) {
+        expect(await workspace.changeFiles(id, { kind: "create", parent: parent!, name: name!, entryKind })).toMatchObject({ created: [], failures: [{ code }] });
+      }
+    }
+    expect(readFileSync(join(cwd, "keep"), "utf8")).toBe("original");
+    expect(readdirSync(join(root, "outside"))).toEqual([]);
+    expect(workspace.listFiles(id, "").entries.some(entry => entry.name === "absent")).toBe(false);
+    await workspace.shutdown();
+  });
 
   it("opens, persists, resolves, and removes a Workspace through explicit identity", async () => {
     const { cwd, workspace, hasActiveTurn } = setup();
