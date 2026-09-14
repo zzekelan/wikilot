@@ -11,7 +11,6 @@ import type { AccessMode } from "../../shared/workspace";
 import { PROMPT_ENTRY_TYPE, createPromptRecord } from "../../shared/session";
 import { installAutomaticReview } from "./index";
 import { createUtilitySettingsStore } from "../utility-model";
-import { constrainJsonSchemaOutput } from "../models";
 import { reviewSchema } from "./structured-output";
 
 const cleanup: (() => void)[] = [];
@@ -224,15 +223,6 @@ it("keeps large pending arguments complete and blocks a context overflow", async
   test.complete.mockClear();
   expect(await test.call()).toMatchObject({ block: true, reason: expect.stringContaining("context window") });
   expect(test.complete).not.toHaveBeenCalled();
-});
-
-it("sets native constraints for each supported protocol and rejects unknown ones", () => {
-  expect(constrainJsonSchemaOutput("openai-completions", {}, { name: "automatic_review", schema: reviewSchema })).toHaveProperty("response_format.json_schema.strict", true);
-  expect(constrainJsonSchemaOutput("openai-codex-responses", {}, { name: "automatic_review", schema: reviewSchema })).toHaveProperty("text.format.strict", true);
-  expect(constrainJsonSchemaOutput("anthropic-messages", { output_config: { effort: "high" } }, { name: "automatic_review", schema: reviewSchema }))
-    .toHaveProperty("output_config.format.schema", reviewSchema);
-  expect(constrainJsonSchemaOutput("google-generative-ai", {}, { name: "automatic_review", schema: reviewSchema })).toHaveProperty("config.responseJsonSchema", reviewSchema);
-  expect(() => constrainJsonSchemaOutput("unknown-api", {}, { name: "automatic_review", schema: reviewSchema })).toThrow("unsupported protocol");
 });
 
 it("Full Access bypasses review configuration and inference, and switching back restores review", async () => {

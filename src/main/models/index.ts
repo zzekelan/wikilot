@@ -23,4 +23,4 @@ export {
   readTrustedProjectModelDefaults,
   type TrustedProjectModelDefaults,
 } from "./project-defaults.ts";
-export { constrainJsonSchemaOutput } from "./structured-output.ts";
+export { completeStructuredOutput } from "./structured-output.ts";

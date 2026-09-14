@@ -280,20 +280,63 @@ it.each([
   expect(complete).toHaveBeenCalledTimes(1);
   expect(await git.revparse("HEAD")).toBe(head); expect(await git.show([":note.md"])).toBe("Pending");
 });
-it.each(["unconstrained", "truncated", "unsupported"])("does not commit %s model output", async mode => {
+it.each(["unconstrained", "truncated"])("does not commit %s model output", async mode => {
   const { cwd, git, versions, getModelContext } = await setup();
   writeFileSync(join(cwd, "note.md"), "Pending");
   const runtime = await ModelRuntime.create({ authPath: join(cwd, "auth.json"), modelsPath: null, refreshOnCreate: false });
   const model = runtime.getModels().find(model => model.api === "openai-completions" && !model.reasoning)!;
   getModelContext.mockResolvedValue({ runtime, settings: { model: { provider: model.provider, model: model.id, thinkingLevel: "off" } } });
-  if (mode === "unsupported") vi.spyOn(runtime, "getModel").mockReturnValue({ ...model, api: "unknown-api" });
   const complete = vi.spyOn(runtime, "completeSimple").mockImplementation(async (_model, _context, options) => {
     if (mode !== "unconstrained") await options?.onPayload?.({}, model);
     return { role: "assistant", api: model.api, provider: model.provider, model: model.id,
       content: [{ type: "text", text: '{"message":"Complete JSON"}' }], stopReason: mode === "truncated" ? "length" : "stop", timestamp: Date.now(),
       usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } } };
   });
-  await expect(versions.save("workspace", {})).rejects.toThrow(mode === "unsupported" ? "unsupported protocol" : "schema-constrained");
-  expect(complete).toHaveBeenCalledTimes(mode === "unsupported" ? 0 : 1);
+  await expect(versions.save("workspace", {})).rejects.toThrow(mode === "unconstrained" ? "native schema was not applied" : "complete structured response");
+  expect(complete).toHaveBeenCalledTimes(1);
   expect((await versions.status("workspace")).versions).toEqual([]); expect(await git.show([":note.md"])).toBe("Pending");
+});
+
+
+it.each(["rejected format", "unsupported protocol", "invalid fallback"])("uses validated prompt output for version saves: %s", async mode => {
+  const { cwd, git, versions, getModelContext } = await setup();
+  writeFileSync(join(cwd, "note.md"), "Initial");
+  await versions.save("workspace", { message: "Initial version" });
+  const head = await git.revparse("HEAD");
+  writeFileSync(join(cwd, "note.md"), "Pending change");
+  const runtime = await ModelRuntime.create({ authPath: join(cwd, "auth.json"), modelsPath: null, refreshOnCreate: false });
+  const model = runtime.getModels().find(model => model.api === "openai-completions" && !model.reasoning)!;
+  getModelContext.mockResolvedValue({ runtime, settings: { model: { provider: model.provider, model: model.id, thinkingLevel: "off" } } });
+  if (mode === "unsupported protocol") vi.spyOn(runtime, "getModel").mockReturnValue({ ...model, api: "unknown-api" });
+  const complete = vi.spyOn(runtime, "completeSimple").mockImplementation(async (_model, context, options) => {
+    expect(context.systemPrompt).toContain('"required":["message"]');
+    expect(context.messages[0].content).toContain("+Pending change");
+    const payload = await options?.onPayload?.({}, model);
+    if (payload) {
+      return { role: "assistant", api: model.api, provider: model.provider, model: model.id,
+        content: [], stopReason: "error", errorMessage: "400: This response_format type is unavailable now", timestamp: Date.now(),
+        usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } } };
+    }
+    return { role: "assistant", api: model.api, provider: model.provider, model: model.id,
+      content: [{ type: "text", text: mode === "invalid fallback" ? '{"message":"Valid","extra":true}' : '{"message":" Save the pending change "}' }],
+      stopReason: "stop", timestamp: Date.now(),
+      usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } } };
+  });
+  if (mode === "invalid fallback") {
+    await expect(versions.save("workspace", {})).rejects.toThrow("invalid version message");
+    expect(await git.revparse("HEAD")).toBe(head);
+    expect(await git.show([":note.md"])).toBe("Pending change");
+  } else {
+    expect(await versions.save("workspace", {})).toEqual({ saved: true });
+    expect((await git.log()).latest?.message).toBe("Save the pending change");
+    expect(await git.show(["HEAD:note.md"])).toBe("Pending change");
+  }
+  expect(complete).toHaveBeenCalledTimes(mode === "unsupported protocol" ? 1 : 2);
+  expect(complete.mock.calls.at(-1)?.[2]?.onPayload).toBeUndefined();
+  if (mode !== "unsupported protocol") {
+    const [native, fallback] = complete.mock.calls;
+    expect(fallback[0]).toBe(native[0]);
+    expect(fallback[1]).toEqual(native[1]);
+    expect(fallback[2]?.signal).toBe(native[2]?.signal);
+  }
 });
