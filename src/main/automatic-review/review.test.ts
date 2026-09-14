@@ -138,13 +138,16 @@ it("returns a denial to the agent without terminating safe alternative work", as
 });
 
 it.each(["not json", '{"outcome":"allow"}', '{"outcome":"allow","reason":"ok","extra":1}'])
-("fails closed for an invalid response: %s", async (text) => {
+("returns invalid output to the agent without executing or terminating: %s", async (text) => {
   const test = await setup(); test.install(); test.prompt("do something");
   test.complete.mockImplementation(async (_model, _context, options) => {
     await options?.onPayload?.({}, test.model);
     return test.assistant([{ type: "text", text }]);
   });
-  expect(await test.call()).toMatchObject({ block: true, terminate: true, reason: expect.stringContaining("Review failed") });
+  const result = await test.call();
+  expect(result).toMatchObject({ block: true, reason: expect.stringContaining("did not pass") });
+  expect(result?.terminate).not.toBe(true);
+  expect(test.complete).toHaveBeenCalledTimes(1);
 });
 
 it("uses an independent selection, and never falls back when it is missing or corrupt", async () => {
@@ -154,9 +157,9 @@ it("uses an independent selection, and never falls back when it is missing or co
   expect(test.getModel).toHaveBeenCalledWith(test.model.provider, test.model.id);
   test.complete.mockClear();
   test.store.update({ model: { provider: "missing", model: "missing", thinkingLevel: "off" } });
-  expect(await test.call()).toMatchObject({ block: true, terminate: true });
+  expect(await test.call()).toMatchObject({ block: true, reason: expect.stringContaining("did not pass") });
   writeFileSync(join(test.root, "utility-model.json"), "broken");
-  expect(await test.call()).toMatchObject({ block: true, terminate: true });
+  expect(await test.call()).toMatchObject({ block: true, reason: expect.stringContaining("did not pass") });
   expect(test.complete).not.toHaveBeenCalled();
   test.store.update({ model: null });
   expect(createUtilitySettingsStore(test.root).read()).toEqual({ model: null });
@@ -193,7 +196,7 @@ it("blocks a timed-out review even if the provider returns an allow when aborted
     const result = test.call();
     await modelStarted;
     controller.abort(new DOMException("Review timed out", "TimeoutError"));
-    expect(await result).toMatchObject({ block: true, terminate: true, reason: expect.stringContaining("timed out") });
+    expect(await result).toMatchObject({ block: true, reason: expect.stringContaining("timed out") });
     expect(timeout).toHaveBeenCalledWith(60_000);
   } finally { timeout.mockRestore(); }
 });
@@ -201,14 +204,14 @@ it("blocks a timed-out review even if the provider returns an allow when aborted
 it("fails on provider errors, truncated output and missing native schema application", async () => {
   const test = await setup(); test.install(); test.prompt("do something");
   test.complete.mockRejectedValueOnce(new Error("Provider unavailable"));
-  expect(await test.call()).toMatchObject({ block: true, terminate: true, reason: expect.stringContaining("Provider unavailable") });
+  expect(await test.call()).toMatchObject({ block: true, reason: expect.stringContaining("Provider unavailable") });
   test.complete.mockImplementationOnce(async (_model, _context, options) => {
     await options?.onPayload?.({}, test.model);
     return { ...test.assistant([{ type: "text", text: '{"outcome":"allow","reason":"ok"}' }]), stopReason: "length" };
   });
-  expect(await test.call()).toMatchObject({ block: true, terminate: true });
+  expect(await test.call()).toMatchObject({ block: true, reason: expect.stringContaining("did not pass") });
   test.complete.mockResolvedValueOnce(test.assistant([{ type: "text", text: '{"outcome":"allow","reason":"ok"}' }]));
-  expect(await test.call()).toMatchObject({ block: true, terminate: true });
+  expect(await test.call()).toMatchObject({ block: true, reason: expect.stringContaining("did not pass") });
 });
 
 it("keeps large pending arguments complete and blocks a context overflow", async () => {
@@ -331,4 +334,99 @@ it("does not bypass review when startup scripts or ripgrep config could add exec
     await test.call("bash", { command: "rg pattern file" });
     expect(test.complete).toHaveBeenCalledTimes(2);
   } finally { vi.unstubAllEnvs(); }
+});
+
+
+it.each(["returned", "thrown"])("retries a %s schema rejection once with prompt guidance", async (failure) => {
+  const test = await setup(); test.install(); test.prompt("write the note");
+  const errorMessage = '400: {"message":"This response_format type is unavailable now","type":"invalid_request_error"}';
+  test.complete.mockImplementationOnce(async (_model, _context, options) => {
+    await options?.onPayload?.({}, test.model);
+    if (failure === "thrown") throw new Error(errorMessage);
+    return { ...test.assistant([]), stopReason: "error", errorMessage };
+  });
+  expect(await test.call()).toBeUndefined();
+  expect(test.complete).toHaveBeenCalledTimes(2);
+  const [first, second] = test.complete.mock.calls;
+  expect(second[0]).toBe(first[0]);
+  expect(second[1]).toEqual(first[1]);
+  expect(second[1].systemPrompt).toContain(JSON.stringify(reviewSchema));
+  expect(second[1].systemPrompt).toContain("No Markdown");
+  expect(second[2]?.onPayload).toBeUndefined();
+  expect(second[2]?.signal).toBe(first[2]?.signal);
+  expect(second[2]?.maxRetries).toBe(0);
+});
+
+it("uses prompt guidance directly when the protocol has no native schema adapter", async () => {
+  const test = await setup(); test.install(); test.prompt("write the note");
+  test.store.update({ model: { provider: test.model.provider, model: test.model.id, thinkingLevel: "off" } });
+  test.getModel.mockReturnValueOnce({ ...test.model, api: "unsupported-api" });
+  expect(await test.call()).toBeUndefined();
+  expect(test.complete).toHaveBeenCalledTimes(1);
+  expect(test.complete.mock.calls[0][2]?.onPayload).toBeUndefined();
+  expect(test.complete.mock.calls[0][1].systemPrompt).toContain(JSON.stringify(reviewSchema));
+});
+
+it.each([
+  ['{"outcome":"deny","reason":"No authorization"}', "No authorization"],
+  ['{"outcome":"allow","reason":""}', "Invalid Automatic Review response"],
+  ['{"outcome":"allow","reason":"ok","extra":true}', "Invalid Automatic Review response"],
+  ['```json\n{"outcome":"allow","reason":"ok"}\n```', "did not pass"],
+])("validates prompted review output and returns non-passing results to the agent: %s", async (text, reason) => {
+  const test = await setup(); test.install(); test.prompt("write the note");
+  test.complete.mockRejectedValueOnce(new Error("400: response_format json_schema is not supported"));
+  test.complete.mockResolvedValueOnce(test.assistant([{ type: "text", text }]));
+  const result = await test.call();
+  expect(result).toMatchObject({ block: true, reason: expect.stringContaining(reason) });
+  expect(result?.terminate).not.toBe(true);
+  expect(test.complete).toHaveBeenCalledTimes(2);
+});
+
+it.each([
+  "401: Invalid API key", "429: Rate limit exceeded", "503: Service unavailable",
+  "400: Invalid schema: required must contain all properties",
+  "400: response_format schema contains unsupported keyword pattern",
+])("does not downgrade unrelated provider failures: %s", async (errorMessage) => {
+  const test = await setup(); test.install(); test.prompt("write the note");
+  test.complete.mockResolvedValueOnce({ ...test.assistant([]), stopReason: "error", errorMessage });
+  const result = await test.call();
+  expect(result).toMatchObject({ block: true, reason: expect.stringContaining(errorMessage) });
+  expect(result?.terminate).not.toBe(true);
+  expect(test.complete).toHaveBeenCalledTimes(1);
+});
+
+it("does not retry again if the prompt-only request also fails", async () => {
+  const test = await setup(); test.install(); test.prompt("write the note");
+  test.complete.mockRejectedValue(new Error("400: response_format json_schema is not supported"));
+  const result = await test.call();
+  expect(result).toMatchObject({ block: true });
+  expect(result?.terminate).not.toBe(true);
+  expect(test.complete).toHaveBeenCalledTimes(2);
+});
+
+it("does not start a prompt fallback after the Turn is cancelled", async () => {
+  const test = await setup(); test.install(); test.prompt("write the note");
+  const controller = new AbortController();
+  test.complete.mockImplementationOnce(async () => {
+    controller.abort();
+    throw new Error("400: response_format json_schema is not supported");
+  });
+  expect(await test.call("write", { path: "note", content: "hi" }, controller.signal))
+    .toMatchObject({ block: true, terminate: true });
+  expect(test.complete).toHaveBeenCalledTimes(1);
+});
+
+
+it.each([
+  "400: Unsupported parameter: 'response_format'",
+  "400: This model does not support json_schema",
+  "400: Invalid value: 'json_schema'. Supported values are: 'text' and 'json_object'.",
+  "400: response_format.type must be one of text, json_object",
+  "400: Unknown field: responseJsonSchema",
+])("recognizes explicit unsupported format errors: %s", async (errorMessage) => {
+  const test = await setup(); test.install(); test.prompt("write the note");
+  test.complete.mockResolvedValueOnce({ ...test.assistant([]), stopReason: "error", errorMessage });
+  expect(await test.call()).toBeUndefined();
+  expect(test.complete).toHaveBeenCalledTimes(2);
+  expect(test.complete.mock.calls[1][2]?.onPayload).toBeUndefined();
 });

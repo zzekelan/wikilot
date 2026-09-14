@@ -1,6 +1,6 @@
 import type { Api } from "@earendil-works/pi-ai";
 
-/** Native response constraints. Unsupported protocols must never use prompt-only JSON. */
+/** Apply native response constraints; callers own any fallback policy for unsupported protocols. */
 export function constrainJsonSchemaOutput(api: Api, payload: unknown, output: { name: string; schema: Record<string, unknown> }): unknown {
   const request = payload as Record<string, unknown>;
   const format = { type: "json_schema", name: output.name, strict: true, schema: output.schema };

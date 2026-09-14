@@ -5,11 +5,13 @@ import { beginAutomaticReview } from "../telemetry/index.ts";
 import { isSafeBashCommand } from "./safe-bash.ts";
 import { reviewConversation } from "./context.ts";
 import { constrainJsonSchemaOutput } from "../models/index.ts";
-import { reviewSchema, parseReviewDecision } from "./structured-output.ts";
+import { reviewSchema, parseReviewDecision, isUnsupportedReviewFormat } from "./structured-output.ts";
 
 import { resolveUtilityModel } from "../utility-model/index.ts";
 
-const POLICY = `You review a proposed tool action before it executes. Return only the JSON Schema decision.
+const POLICY = `You review a proposed tool action before it executes.
+Return exactly one JSON object matching this schema: ${JSON.stringify(reviewSchema)}.
+No Markdown, code fences, commentary, extra fields or tool calls. The reason must be a non-empty string.
 Evaluate both the concrete risk and authorization in the supplied ordered conversation.
 Allow routine reads, local edits, builds, tests and other reversible actions necessary for the user's task.
 Allow consequential actions when the user's instructions clearly authorize their target and side effects.
@@ -82,7 +84,13 @@ export function installAutomaticReview(options: {
       const { model, thinkingLevel } = resolveUtilityModel(runtime, { model: selected }, session.model ? {
         provider: session.model.provider, model: session.model.id, thinkingLevel: session.thinkingLevel,
       } : undefined);
-      constrainJsonSchemaOutput(model.api, {}, { name: "automatic_review", schema: reviewSchema }); // Fail before requesting an unsupported protocol.
+      let nativeSchema = true;
+      try {
+        constrainJsonSchemaOutput(model.api, {}, { name: "automatic_review", schema: reviewSchema });
+      } catch (error) {
+        if (!(error instanceof Error) || !error.message.startsWith("Native JSON Schema output is required; unsupported protocol:")) throw error;
+        nativeSchema = false;
+      }
       const input = JSON.stringify({
         conversation: reviewConversation(session.sessionManager.getBranch()),
         action: { tool, arguments: call.args, cwd: options.cwd,
@@ -94,23 +102,36 @@ export function installAutomaticReview(options: {
       if (Math.ceil((POLICY.length + input.length) / 4) + maxTokens > model.contextWindow) {
         throw new Error("Automatic Review input exceeds the Utility Model context window");
       }
-      // One isolated model call using the existing runtime and credential store.
-      let constrained = false;
-      const response = await runtime.completeSimple(model, {
+      const context = {
         systemPrompt: POLICY,
-        messages: [{ role: "user", content: input, timestamp: Date.now() }],
-      }, {
-        signal: reviewSignal, timeoutMs: REVIEW_TIMEOUT_MS, maxRetries: 0, maxTokens,
-        reasoning: thinkingLevel === "off" ? undefined : thinkingLevel,
-        onPayload(payload) {
-          const constrainedPayload = constrainJsonSchemaOutput(model.api, payload, { name: "automatic_review", schema: reviewSchema });
-          constrained = true;
-          return constrainedPayload;
-        },
-      });
-      reviewSignal.throwIfAborted();
-      if (!constrained || response.stopReason !== "stop") {
-        throw new Error(response.errorMessage || "Automatic Review did not return a complete schema-constrained decision");
+        messages: [{ role: "user" as const, content: input, timestamp: Date.now() }],
+      };
+      async function requestDecision(constrain: boolean) {
+        reviewSignal.throwIfAborted();
+        let constrained = false;
+        const response = await runtime.completeSimple(model, context, {
+          signal: reviewSignal, timeoutMs: REVIEW_TIMEOUT_MS, maxRetries: 0, maxTokens,
+          reasoning: thinkingLevel === "off" ? undefined : thinkingLevel,
+          ...(constrain ? { onPayload(payload: unknown) {
+            const constrainedPayload = constrainJsonSchemaOutput(model.api, payload, { name: "automatic_review", schema: reviewSchema });
+            constrained = true;
+            return constrainedPayload;
+          } } : {}),
+        });
+        reviewSignal.throwIfAborted();
+        if (response.stopReason !== "stop") {
+          throw new Error(response.errorMessage || "Automatic Review did not return a complete decision");
+        }
+        if (constrain && !constrained) throw new Error("Automatic Review native schema was not applied");
+        return response;
+      }
+      let response;
+      try {
+        response = await requestDecision(nativeSchema);
+      } catch (error) {
+        if (!nativeSchema || reviewSignal.aborted || !isUnsupportedReviewFormat(error)) throw error;
+        // Retry only a rejected native format, once, on the same model and deadline.
+        response = await requestDecision(false);
       }
       const decision = parseReviewDecision(response.content.filter((block) => block.type === "text")
         .map((block) => block.text).join(""));
@@ -121,8 +142,8 @@ export function installAutomaticReview(options: {
       };
     } catch (error) {
       finish(signal?.aborted ? "cancelled" : "error");
-      return { block: true, terminate: true,
-        reason: `Automatic Review failed; the action was not executed. ${error instanceof Error ? error.message : String(error)}` };
+      return { block: true, ...(signal?.aborted ? { terminate: true } : {}),
+        reason: `Automatic Review did not pass; the action was not executed because no valid review decision was obtained. ${error instanceof Error ? error.message : String(error)}\nDecide the next step using this tool result: explain the review problem, pursue a safe alternative, or ask the user for clarification or a review configuration change. This result does not authorize the blocked action; do not bypass review or repeatedly retry the same action unchanged.` };
     }
   };
 }
