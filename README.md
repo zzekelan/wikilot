@@ -2,7 +2,14 @@
 
 Personal desktop agent for local knowledge work.
 
-## Quick start
+## Send Your Agent for a Quick Start
+
+```text
+Read this guidance:
+https://raw.githubusercontent.com/zzekelan/wikilot/dev/docs/quick-start/quick-start.md
+```
+
+## Install
 
 Install Node.js 22.18 or newer, then run this command in the cloned repository
 to install dependencies, register the command, and open Wikilot:
