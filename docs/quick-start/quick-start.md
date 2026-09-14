@@ -23,14 +23,13 @@ already provided.
    ```
 
    Replace the placeholder with the chosen path, quoted for the user's shell.
-   Setup installs dependencies, registers `wikilot`, and starts the app in the
-   default browser. Run it in a terminal the user can keep open. If global
-   linking fails, fix the user-level npm prefix or PATH rather than installing
-   as root.
+   Setup installs dependencies and starts the app in the default browser.
+   It does not register a global command. Run it in a terminal the user can
+   keep open.
 
 4. Read the terminal's local URL and verify that Wikilot opens. If the browser
    does not open automatically, open that URL. If port 5173 is occupied, use
-   `wikilot --port 5174`. With no browser access, ask the user to confirm that
+   `npm run wikilot -- --port 5174` from the installation directory. With no browser access, ask the user to confirm that
    the interface appeared before continuing.
 
 5. Guide the user through the following steps in order. Explain each when they
@@ -44,7 +43,7 @@ already provided.
    | Initialize the Workspace | Introduce `/init`, which starts a conversation to agree on the Workspace's purpose and organization. Help the user invoke it if they want to set up their Workspace now. |
 
 6. Tell the user where Wikilot is installed and how to use it next time:
-   run `wikilot` from any directory; keep its terminal open; press Ctrl+C in
+   run `npm run wikilot` from the installation directory; keep its terminal open; press Ctrl+C in
    that terminal to stop it. Closing the browser tab does not stop the service.
    Keep the installation directory and its dependencies. Report which setup
    steps succeeded and any remaining user action.
